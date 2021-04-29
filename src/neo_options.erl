@@ -8,16 +8,17 @@
 %%%_* Exports =================================================================
 %%%_ * API --------------------------------------------------------------------
 
--export([ normalize/2, partition_config/1 ]).
+-export([normalize/2, partition_config/1]).
 
--export([ partition_option/2 ]).
+-export([partition_option/2]).
 
 %%%_ * Types ------------------------------------------------------------------
 
--export_type([ options/0
-             , proplist/0
-             , proplist/2
-             ]).
+-export_type([
+    options/0,
+    proplist/0,
+    proplist/2
+]).
 
 %%%_* Includes ================================================================
 
@@ -33,18 +34,18 @@
 
 -type config() :: #{
     {option()} => expansions(),
-    [option()|aliases()] => value(),
+    [option() | aliases()] => value(),
     option() => value()
 }.
 
 -type partitioned_config() :: #{
-    negations := #{ option() := option() },
-    aliases := #{ option() := option() },
-    expansions := #{ option() := expansions() },
+    negations := #{option() := option()},
+    aliases := #{option() := option()},
+    expansions := #{option() := expansions()},
     defaults := #{}
 }.
 
--type options() :: #{ option() => value() }.
+-type options() :: #{option() => value()}.
 
 -type proplist() :: proplist(atom(), term()).
 
@@ -76,23 +77,29 @@ normalize(Options, Config) when is_list(Options) andalso is_map(Config) ->
         expansions := Expansions,
         defaults := Defaults
     } = partition_config(Config),
-    Proplist = proplists:unfold(proplists:normalize(Options, [
-        %% Must come in this order
-        {negations, maps:to_list(Negations)},
-        {aliases, maps:to_list(Aliases)},
-        {expand, maps:to_list(Expansions)}
-    ])),
+    Proplist = proplists:unfold(
+        proplists:normalize(Options, [
+            %% Must come in this order
+            {negations, maps:to_list(Negations)},
+            {aliases, maps:to_list(Aliases)},
+            {expand, maps:to_list(Expansions)}
+        ])
+    ),
     neo:merge(Defaults, neo:from_list(Proplist)).
 
 %%%_* Private functions ------------------------------------------------------
 -spec partition_config(config()) -> partitioned_config().
 partition_config(Config) when is_map(Config) ->
-     lists:foldl(fun partition_option/2, #{
-        negations => #{},
-        aliases => #{},
-        expansions => #{},
-        defaults => #{}
-    }, maps:to_list(Config)).
+    lists:foldl(
+        fun partition_option/2,
+        #{
+            negations => #{},
+            aliases => #{},
+            expansions => #{},
+            defaults => #{}
+        },
+        maps:to_list(Config)
+    ).
 
 -spec partition_option(Stage, Config) -> partitioned_config() when
     Stage :: {option(), term()} | {[option()], term()} | {{option()}, expansions()},
@@ -102,15 +109,14 @@ partition_option({Key, Flag}, Config) when is_boolean(Flag) ->
     BinaryNoKey = <<"no_"/utf8, BinaryKey/binary>>,
     AtomNoKey = binary_to_atom(BinaryNoKey, utf8),
     neo:merge(Config, #{
-        negations => #{ AtomNoKey => {Key, Flag} },
-        defaults => #{ Key => Flag }
+        negations => #{AtomNoKey => {Key, Flag}},
+        defaults => #{Key => Flag}
     });
-partition_option({[Target|Aliases], Value}, Config) ->
+partition_option({[Target | Aliases], Value}, Config) ->
     neo:merge(Config, #{
         aliases => maps:from_list([
             {Alias, Target}
-        ||
-            Alias <- Aliases
+         || Alias <- Aliases
         ]),
         defaults => #{
             Target => Value

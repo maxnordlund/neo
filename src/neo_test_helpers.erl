@@ -1,18 +1,19 @@
 -module(neo_test_helpers).
 
--export([ format/2
-        , format_call/2
-        , test_case/1
-        ]).
+-export([
+    format/2,
+    format_call/2,
+    test_case/1
+]).
 
 format_call(Call, Arguments) ->
-    [Fun|_] = re:replace(Call, " ?\\(.*", ""),
+    [Fun | _] = re:replace(Call, " ?\\(.*", ""),
     FormatString = [
         "~s(",
         lists:join(", ", lists:duplicate(length(Arguments), "~p")),
         ")"
     ],
-    format(FormatString, [Fun|Arguments]).
+    format(FormatString, [Fun | Arguments]).
 
 format(FormatString, Arguments) ->
     lists:flatten(io_lib:format(lists:flatten(FormatString), Arguments)).
@@ -25,32 +26,38 @@ format(FormatString, Arguments) ->
 %% And while I'm at it, make it a tad nicer by allowing you to specify
 %% test names using a Name => Test map instead of {Name, Test} tuples.
 %% Also, make the setup optional, like how the cleanup is already.
-test_case(#{ name := Name, test := Test } = Options) ->
-    test_case(maps:without([name, test], Options#{
-        tests => [{Name, Test}]
-    }));
-test_case(#{ test := Test } = Options) ->
-    test_case(maps:remove(test, Options#{
-        tests => [Test]
-    }));
-test_case(#{ tests := Tests } = Options) when is_map(Tests) ->
+test_case(#{name := Name, test := Test} = Options) ->
+    test_case(
+        maps:without([name, test], Options#{
+            tests => [{Name, Test}]
+        })
+    );
+test_case(#{test := Test} = Options) ->
+    test_case(
+        maps:remove(test, Options#{
+            tests => [Test]
+        })
+    );
+test_case(#{tests := Tests} = Options) when is_map(Tests) ->
     test_case(Options#{
         tests => maps:to_list(Tests)
     });
-test_case(#{ cleanup := _ } = Options) when not is_map_key(setup, Options) ->
+test_case(#{cleanup := _} = Options) when not is_map_key(setup, Options) ->
     %% Allow just cleanup, even though vanilla EUnit does not
     test_case(Options#{
         setup => fun() -> ok end
     });
-test_case(#{ setup := Setup, tests := Tests } = Options) ->
-    TestAndMaybeCleanup = case Options of
-        #{ cleanup := Cleanup } -> [Cleanup, Tests];
-        _ -> [Tests]
-    end,
-    SetupAndMaybeWhere = case Options of
-        #{ where := Where } -> [Where, Setup|TestAndMaybeCleanup];
-        _ -> [Setup|TestAndMaybeCleanup]
-    end,
-    list_to_tuple([foreach|SetupAndMaybeWhere]);
-test_case(#{ tests := Tests }) ->
+test_case(#{setup := Setup, tests := Tests} = Options) ->
+    TestAndMaybeCleanup =
+        case Options of
+            #{cleanup := Cleanup} -> [Cleanup, Tests];
+            _ -> [Tests]
+        end,
+    SetupAndMaybeWhere =
+        case Options of
+            #{where := Where} -> [Where, Setup | TestAndMaybeCleanup];
+            _ -> [Setup | TestAndMaybeCleanup]
+        end,
+    list_to_tuple([foreach | SetupAndMaybeWhere]);
+test_case(#{tests := Tests}) ->
     Tests.
