@@ -22,8 +22,11 @@
 %%%_ * API --------------------------------------------------------------------
 
 -export([
-    deep_map/2,
+    deep_filter/2,
     deep_filter_map/2,
+    deep_flatten/1,
+    deep_fold/3,
+    deep_map/2,
     deep_map_keys/2,
     deep_map_values/2,
     dget/2,
@@ -32,6 +35,7 @@
     delete/2,
     ddelete/2,
     dset/3,
+    fold/3,
     from_list/1,
     get/2,
     get/3,
@@ -538,6 +542,17 @@ deep_map_values(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
         {Key, Fun(Key, Value)}
     end).
 
+deep_filter(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
+    deep_filter_map(
+        Map,
+        fun(Key, Value) ->
+            case Fun(Key, Value) of
+                true -> {true, Value};
+                false -> false
+            end
+        end
+    ).
+
 deep_filter_map(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
     maps:from_list(
         lists:filtermap(
@@ -558,6 +573,27 @@ deep_filter_map(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
             maps:to_list(Map)
         )
     ).
+
+fold(Map, Init, Fun) when is_function(Fun, 3) andalso is_map(Map) ->
+    maps:fold(Fun, Init, Map).
+
+deep_fold(Map, Init, Fun) when is_function(Fun, 3) andalso is_map(Map) ->
+    maps:fold(
+        fun
+            (_Key, Value, Acc) when is_map(Value) ->
+                deep_fold(Value, Acc, Fun);
+            (Key, Value, Acc) ->
+                Fun(Key, Value, Acc)
+        end,
+        Init,
+        Map
+    ).
+
+deep_flatten(Map) ->
+    lists:reverse(deep_fold(Map, [], fun deep_flattener/3)).
+
+deep_flattener(Key, Value, List) ->
+    [{Key, Value}|List].
 
 %% @doc Like `merge/2', merging each map in `Maps' left-to-right.
 merge(Maps) when is_map(hd(Maps)) ->
