@@ -580,10 +580,11 @@ fold(Map, Init, Fun) when is_function(Fun, 3) andalso is_map(Map) ->
 deep_fold(Map, Init, Fun) when is_function(Fun, 3) andalso is_map(Map) ->
     maps:fold(
         fun
-            (_Key, Value, Acc) when is_map(Value) ->
-                deep_fold(Value, Acc, Fun);
-            (Key, Value, Acc) ->
-                Fun(Key, Value, Acc)
+            (Key, Value, Acc0) when is_map(Value) ->
+                Acc1 = deep_fold(Value, Acc0, Fun),
+                Fun(Key, Value, Acc1);
+            (Key, Value, Acc0) ->
+                Fun(Key, Value, Acc0)
         end,
         Init,
         Map
