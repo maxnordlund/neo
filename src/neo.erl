@@ -97,6 +97,17 @@
 -type collection() :: collection(key(), term()).
 
 %%%_* Macros ==================================================================
+-define(is_key(Key), (is_atom(Key) orelse is_binary(Key))).
+
+-define(is_ordset(Object),
+    (
+        length(Object) =:= 0 orelse
+        (
+            tuple_size(hd(Object)) =:= 2 andalso
+            ?is_key(element(1, hd(Object)))
+        )
+    )
+).
 
 %%%_* Code ====================================================================
 %%%_ * API --------------------------------------------------------------------
@@ -159,7 +170,7 @@ get(Map, Key) when is_map(Map) ->
         #{Key := Value} -> {ok, Value};
         _ -> {error, notfound}
     end;
-get(Object, Key) when is_list(Object) andalso (is_atom(Key) orelse is_binary(Key)) ->
+get(Object, Key) when ?is_ordset(Object) andalso ?is_key(Key) ->
     case lists:keyfind(Key, 1, Object) of
         {Key, Value} -> {ok, Value};
         false -> {error, notfound}
@@ -281,7 +292,7 @@ dget(Collection, Lookup, Default) ->
     Value :: term().
 set(Map, Key, Value) when is_map(Map) ->
     maps:put(Key, Value, Map);
-set([{_Key, _Value} | _] = Object, Key, Value) when is_atom(Key) orelse is_binary(Key) ->
+set(Object, Key, Value) when ?is_ordset(Object) andalso ?is_key(Key) ->
     OrderedDictionary = orddict:from_list(Object),
     orddict:store(Key, Value, OrderedDictionary);
 set(List, Index, Value) when is_list(List) andalso is_integer(Index) ->
@@ -321,7 +332,7 @@ delete(Map, Key) when is_map_key(Key, Map) ->
     maps:remove(Key, Map);
 delete(Map, _Key) when is_map(Map) ->
     Map;
-delete([{_Key, _Value} | _] = Object, Key) when is_atom(Key) orelse is_binary(Key) ->
+delete(Object, Key) when ?is_ordset(Object) andalso ?is_key(Key) ->
     lists:keydelete(Key, 1, Object);
 delete(List, Index) when is_list(List) andalso is_integer(Index) ->
     {Head, [_ | Tail]} = lists:split(Index - 1, List),
