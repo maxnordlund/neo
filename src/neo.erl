@@ -80,6 +80,7 @@
 ]).
 
 %%%_* Includes ================================================================
+-include_lib("stdlib/include/assert.hrl").
 
 %%%_ * Types ==================================================================
 
@@ -380,20 +381,23 @@ pop(Collection, Lookup) ->
 %%
 %% This means each key may have one or more maps associated with it.
 -spec group_by([Map], Key) -> #{Value => [Map]} when Map :: #{Key => Value}.
-group_by(Maps, Key) ->
+group_by(Maps, Fun) when is_function(Fun, 1) ->
+    ?assertEqual([], [Term || Term <- Maps, not is_map(Term)]),
     lists:foldl(
         fun(Map, Groups) ->
-            case Map of
-                #{Key := Value} ->
+            case Fun(Map) of
+                {ok, Value} ->
                     Group = maps:get(Value, Groups, []),
                     Groups#{Value => [Map | Group]};
-                _Unknown ->
+                {error, notfound} ->
                     Groups
             end
         end,
         #{},
         Maps
-    ).
+    );
+group_by(Maps, Key) ->
+    group_by(Maps, fun(Map) -> get(Map, Key) end).
 
 %% @doc Returns a map of maps where the keys are the set of values
 %% associated with `Key' in each of the maps in `Maps'.
@@ -831,13 +835,13 @@ get_failure_test_() ->
     ].
 
 group_by_test_() ->
+    ById = fun(#{id := Id}) -> {ok, Id} end,
+    [?_assertError({assertEqual, _}, group_by([1, a, "c"], key))] ++
     ?function_test(
         group_by(Maps, Key),
         [Maps, Key],
         #{
             [[], key] =>
-                #{},
-            [[1, a, "c"], key] =>
                 #{},
             [[#{other => value}, #{key => abc}], key] =>
                 #{
@@ -854,18 +858,25 @@ group_by_test_() ->
                         #{key => 123, foo => bar},
                         #{key => 123, other => value}
                     ]
+                },
+            [[#{id => 123, name => "Jane"}, #{id => 123, name => "John"}], ById] =>
+                #{
+                    123 => [
+                        #{id => 123, name => "John"},
+                        #{id => 123, name => "Jane"}
+                    ]
                 }
         }
     ).
 
 group_unique_by_test_() ->
+    ById = fun(#{id := Id}) -> {ok, Id} end,
+    [?_assertError({assertEqual, _}, group_unique_by([1, a, "c"], key))] ++
     ?function_test(
         group_unique_by(Maps, Key),
         [Maps, Key],
         #{
             [[], key] =>
-                #{},
-            [[1, a, "c"], key] =>
                 #{},
             [[#{other => value}, #{key => abc}], key] =>
                 #{
@@ -879,6 +890,10 @@ group_unique_by_test_() ->
             [[#{key => 123, other => value}, #{key => 123, foo => bar}], key] =>
                 #{
                     123 => #{key => 123, foo => bar}
+                },
+            [[#{id => 123, name => "Jane"}, #{id => 123, name => "John"}], ById] =>
+                #{
+                    123 => #{id => 123, name => "Jane"}
                 }
         }
     ).
