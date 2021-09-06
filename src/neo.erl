@@ -150,7 +150,7 @@ to_list(List) when is_list(List) ->
 to_list(Other) ->
     Other.
 
-%% @doc Creates a new map, for comptibility with {@link eon}.
+%% @doc Creates a new map, for compatibility with {@link eon}.
 new() -> #{}.
 
 %% @doc Returns the value associated with `Key' if given a map
@@ -224,12 +224,12 @@ get(Collection, Lookup, Default) ->
         {error, notfound} -> Default
     end.
 
-%% @doc Like `get/2', except it accepts either a dot seperated path in a
-%% binary for binary keys, dot seperated atom for atom keys, or a list of
+%% @doc Like `get/2', except it accepts either a dot separated path in a
+%% binary for binary keys, dot separated atom for atom keys, or a list of
 %% explicit path elements.
 %%
 %% To make it a bit more convenient, this allows you to use the dot
-%% seperated path even with atomed keyed maps.
+%% separated path even with atomed keyed maps.
 %%
 %% If you need to traverse lists, use a path list with integer indexes.
 %%
@@ -246,12 +246,12 @@ dget_(Collection, Lookup) ->
         {error, notfound} -> error({badkey, Lookup})
     end.
 
-%% @doc Like `get/2', except it accepts either a dot seperated path in a
-%% binary for binary keys, dot seperated atom for atom keys, or a list
+%% @doc Like `get/2', except it accepts either a dot separated path in a
+%% binary for binary keys, dot separated atom for atom keys, or a list
 %% of explicit path elements.
 %%
 %% To make it a bit more convenient, this allows you to use the dot
-%% seperated path even with atomed keyed maps.
+%% separated path even with atomed keyed maps.
 %%
 %% If you need to traverse lists, use a path list with integer indexes.
 %%
@@ -300,12 +300,12 @@ set(List, Index, Value) when is_list(List) andalso is_integer(Index) ->
     {Head, Tail} = lists:split(Index, List),
     Head ++ [Value | Tail].
 
-%% @doc Like `set/2', except it accepts either a dot seperated path in a
-%% binary for binary keys, dot seperated atom for atom keys, or a list of
+%% @doc Like `set/2', except it accepts either a dot separated path in a
+%% binary for binary keys, dot separated atom for atom keys, or a list of
 %% explicit path elements.
 %%
 %% To make it a bit more convenient, this allows you to use the dot
-%% seperated path even with atomed keyed maps.
+%% separated path even with atomed keyed maps.
 %%
 %% If you need to traverse lists, use a path list with integer indexes.
 -spec dset(Collection, Lookup, Value) -> Collection when
@@ -339,12 +339,12 @@ delete(List, Index) when is_list(List) andalso is_integer(Index) ->
     {Head, [_ | Tail]} = lists:split(Index - 1, List),
     Head ++ Tail.
 
-%% @doc Like `delete/2', except it accepts either a dot seperated path in a
-%% binary for binary keys, dot seperated atom for atom keys, or a list of
+%% @doc Like `delete/2', except it accepts either a dot separated path in a
+%% binary for binary keys, dot separated atom for atom keys, or a list of
 %% explicit path elements. It only accepts maps, unlike `delete/2'.
 %%
 %% To make it a bit more convenient, this allows you to use the dot
-%% seperated path even with atomed keyed maps.
+%% separated path even with atomed keyed maps.
 %%
 %% If you need to traverse lists, use a path list with integer indexes.
 -spec ddelete(Collection, Lookup) -> Collection when
@@ -484,12 +484,12 @@ key_member([Map | _Maps], Key, Value) when map_get(Key, Map) == Value -> true;
 key_member([_Map | Maps], Key, Value) -> key_member(Maps, Key, Value);
 key_member([], _Key, _Value) -> false.
 
-%% @doc Simliar to `lists:keymerge' except the lists does not need to be
+%% @doc Similar to `lists:keymerge' except the lists does not need to be
 %% sorted or duplicates removed before hand.
 key_merge(Maps, Key, Defaults) ->
     key_merger(Maps, Key, Defaults, fun lists:keysort/2, fun lists:keymerge/3).
 
-%% @doc Simliar to `lists:ukeymerge' except the lists does not need to be
+%% @doc Similar to `lists:ukeymerge' except the lists does not need to be
 %% sorted or duplicates removed before hand.
 key_unique_merge(Maps, Key, Defaults) ->
     key_merger(Maps, Key, Defaults, fun lists:ukeysort/2, fun lists:ukeymerge/3).
@@ -923,9 +923,9 @@ key_delete_test_() ->
         key_delete(Maps, Key, Target),
         [Maps, Key, Target],
         #{
-            [[], somekey, target] =>
+            [[], some_key, target] =>
                 [],
-            [[#{}], somekey, target] =>
+            [[#{}], some_key, target] =>
                 [#{}],
             [[#{key => target}], key, other] =>
                 [#{key => target}],
