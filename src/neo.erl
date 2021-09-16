@@ -562,7 +562,7 @@ deep_filter(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
         Map,
         fun(Key, Value) ->
             case Fun(Key, Value) of
-                true -> {true, Value};
+                true -> {true, {Key, Value}};
                 false -> false
             end
         end
