@@ -153,6 +153,8 @@ to_list(List) when is_list(List) ->
 to_list(Other) ->
     Other.
 
+-compile({inline, new/0}).
+
 %% @doc Creates a new map, for compatibility with {@link eon}.
 new() -> #{}.
 
@@ -299,8 +301,10 @@ set(Map, Key, Value) when is_map(Map) ->
 set(Object, Key, Value) when ?is_ordset(Object) andalso ?is_key(Key) ->
     OrderedDictionary = orddict:from_list(Object),
     orddict:store(Key, Value, OrderedDictionary);
-set(List, Index, Value) when is_list(List) andalso is_integer(Index) ->
-    {Head, Tail} = lists:split(Index, List),
+set([], 1, Value) ->
+    [Value];
+set(List, Index, Value) when 0 < Index andalso Index =< length(List) ->
+    {Head, [_ExistingValue | Tail]} = lists:split(Index - 1, List),
     Head ++ [Value | Tail].
 
 %% @doc Like `set/2', except it accepts either a dot separated path in a
@@ -683,12 +687,17 @@ dget_internal({error, notfound}, _) -> {error, notfound};
 dget_internal({ok, null}, _) -> {error, notfound};
 dget_internal({ok, Object}, [Key | Path]) -> dget_internal(get(Object, Key), Path).
 
-dset_internal(_Map, [], Value) ->
+dset_internal(_Object, [], Value) ->
     Value;
 dset_internal(Object, [Key], Value) ->
     set(Object, Key, Value);
 dset_internal(OuterObject, [Key | Path], Value) ->
-    InnerObject = get(OuterObject, Key, #{}),
+    Default =
+        case Path of
+            [Index | _] when is_integer(Index) -> [];
+            _ -> #{}
+        end,
+    InnerObject = get(OuterObject, Key, Default),
     set(OuterObject, Key, dset_internal(InnerObject, Path, Value)).
 
 ddelete_internal(Map, [Key]) ->
@@ -848,66 +857,66 @@ get_failure_test_() ->
 group_by_test_() ->
     ById = fun(#{id := Id}) -> {ok, Id} end,
     [?_assertError({assertEqual, _}, group_by([1, a, "c"], key))] ++
-    ?function_test(
-        group_by(Maps, Key),
-        [Maps, Key],
-        #{
-            [[], key] =>
-                #{},
-            [[#{other => value}, #{key => abc}], key] =>
-                #{
-                    abc => [#{key => abc}]
-                },
-            [[#{key => 123, other => value}, #{key => abc}], key] =>
-                #{
-                    123 => [#{key => 123, other => value}],
-                    abc => [#{key => abc}]
-                },
-            [[#{key => 123, other => value}, #{key => 123, foo => bar}], key] =>
-                #{
-                    123 => [
-                        #{key => 123, foo => bar},
-                        #{key => 123, other => value}
-                    ]
-                },
-            [[#{id => 123, name => "Jane"}, #{id => 123, name => "John"}], ById] =>
-                #{
-                    123 => [
-                        #{id => 123, name => "John"},
-                        #{id => 123, name => "Jane"}
-                    ]
-                }
-        }
-    ).
+        ?function_test(
+            group_by(Maps, Key),
+            [Maps, Key],
+            #{
+                [[], key] =>
+                    #{},
+                [[#{other => value}, #{key => abc}], key] =>
+                    #{
+                        abc => [#{key => abc}]
+                    },
+                [[#{key => 123, other => value}, #{key => abc}], key] =>
+                    #{
+                        123 => [#{key => 123, other => value}],
+                        abc => [#{key => abc}]
+                    },
+                [[#{key => 123, other => value}, #{key => 123, foo => bar}], key] =>
+                    #{
+                        123 => [
+                            #{key => 123, foo => bar},
+                            #{key => 123, other => value}
+                        ]
+                    },
+                [[#{id => 123, name => "Jane"}, #{id => 123, name => "John"}], ById] =>
+                    #{
+                        123 => [
+                            #{id => 123, name => "John"},
+                            #{id => 123, name => "Jane"}
+                        ]
+                    }
+            }
+        ).
 
 group_unique_by_test_() ->
     ById = fun(#{id := Id}) -> {ok, Id} end,
     [?_assertError({assertEqual, _}, group_unique_by([1, a, "c"], key))] ++
-    ?function_test(
-        group_unique_by(Maps, Key),
-        [Maps, Key],
-        #{
-            [[], key] =>
-                #{},
-            [[#{other => value}, #{key => abc}], key] =>
-                #{
-                    abc => #{key => abc}
-                },
-            [[#{key => 123, other => value}, #{key => abc}], key] =>
-                #{
-                    123 => #{key => 123, other => value},
-                    abc => #{key => abc}
-                },
-            [[#{key => 123, other => value}, #{key => 123, foo => bar}], key] =>
-                #{
-                    123 => #{key => 123, foo => bar}
-                },
-            [[#{id => 123, name => "Jane"}, #{id => 123, name => "John"}], ById] =>
-                #{
-                    123 => #{id => 123, name => "Jane"}
-                }
-        }
-    ).
+        ?function_test(
+            group_unique_by(Maps, Key),
+            [Maps, Key],
+            #{
+                [[], key] =>
+                    #{},
+                [[#{other => value}, #{key => abc}], key] =>
+                    #{
+                        abc => #{key => abc}
+                    },
+                [[#{key => 123, other => value}, #{key => abc}], key] =>
+                    #{
+                        123 => #{key => 123, other => value},
+                        abc => #{key => abc}
+                    },
+                [[#{key => 123, other => value}, #{key => 123, foo => bar}], key] =>
+                    #{
+                        123 => #{key => 123, foo => bar}
+                    },
+                [[#{id => 123, name => "Jane"}, #{id => 123, name => "John"}], ById] =>
+                    #{
+                        123 => #{id => 123, name => "Jane"}
+                    }
+            }
+        ).
 
 key_replace_test_() ->
     ?function_test(
@@ -1029,6 +1038,42 @@ dget__test_() ->
             }}
         ]
     ].
+
+set_test_() ->
+    ?function_test(
+        set(Object, Key, Value),
+        [Object, Key, Value],
+        #{
+            [#{}, key, target] =>
+                #{key => target},
+            [#{key => value}, key, target] =>
+                #{key => target},
+            [[], 1, target] =>
+                [target],
+            [[value], 1, target] =>
+                [target]
+        }
+    ).
+
+dset_test_() ->
+    ?function_test(
+        dset(Object, Path, Value),
+        [Object, Path, Value],
+        #{
+            [#{}, [key], target] =>
+                #{key => target},
+            [#{key => value}, [key], target] =>
+                #{key => target},
+            [[], [1], target] =>
+                [target],
+            [[value], [1], target] =>
+                [target],
+            [#{}, [top, 1], target] =>
+                #{top => [target]},
+            [#{}, [top, 1, key], target] =>
+                #{top => [#{key => target}]}
+        }
+    ).
 
 zip_test_() ->
     [
