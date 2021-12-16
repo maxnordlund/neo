@@ -124,8 +124,15 @@ from_list([{_Key, _Value} | _] = Proplist) ->
     ]);
 from_list(List) when is_list(List) ->
     lists:map(fun from_list/1, List);
+from_list(Map) when is_map(Map) ->
+    maps:map(fun from_list_map_value_mapper/2, Map);
 from_list(Other) ->
     Other.
+
+%% @private
+%% @doc Helper for {@link from_list/1} for converting values of nested maps.
+from_list_map_value_mapper(_Key, Value) ->
+    from_list(Value).
 
 %% @doc Returns a potentially nested proplist by recursively convert the given
 %% potentially nested map.
@@ -792,6 +799,14 @@ from_list_test_() ->
         #{
             [[]] => #{},
             [#{}] => #{},
+            [[{<<"items">>, #{0 => [{<<"plan">>, <<"kivra-scanning-regular">>}]}}]] =>
+                #{
+                    <<"items">> => #{
+                        0 => #{
+                            <<"plan">> => <<"kivra-scanning-regular">>
+                        }
+                    }
+                },
             ?EON_MAP_EXAMPLES
         }
     ).
