@@ -101,13 +101,9 @@
 -define(is_key(Key), (is_atom(Key) orelse is_binary(Key))).
 
 -define(is_ordset(Object),
-    (
-        length(Object) =:= 0 orelse
-        (
-            tuple_size(hd(Object)) =:= 2 andalso
-            ?is_key(element(1, hd(Object)))
-        )
-    )
+    (length(Object) =:= 0 orelse
+        (tuple_size(hd(Object)) =:= 2 andalso
+            ?is_key(element(1, hd(Object)))))
 ).
 
 %%%_* Code ====================================================================
@@ -609,7 +605,7 @@ deep_flatten(Map) ->
     lists:reverse(deep_fold(Map, [], fun deep_flattener/3)).
 
 deep_flattener(Key, Value, List) ->
-    [{Key, Value}|List].
+    [{Key, Value} | List].
 
 %% @doc Like `merge/2', merging each map in `Maps' left-to-right.
 merge(Maps) when is_map(hd(Maps)) ->
@@ -1061,7 +1057,8 @@ merge_test_() ->
             {#{key => old}, #{key => '_'}, #{key => old}},
             {#{nested => #{key => old}}, #{}, #{nested => #{key => old}}},
             {#{nested => #{key => old}}, #{nested => 123}, #{nested => 123}},
-            {#{
+            {
+                #{
                     nested => #{
                         overridden => hello,
                         kept => world
@@ -1079,8 +1076,10 @@ merge_test_() ->
                         kept => world,
                         added => 123
                     }
-                }},
-            {#{
+                }
+            },
+            {
+                #{
                     list => [
                         #{key => old},
                         #{key => <<"binary">>}
@@ -1097,7 +1096,8 @@ merge_test_() ->
                         #{key => new, other => value},
                         #{key => <<"binary">>}
                     ]
-                }}
+                }
+            }
         ]
     ].
 
