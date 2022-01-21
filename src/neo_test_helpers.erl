@@ -26,6 +26,31 @@ format(FormatString, Arguments) ->
 %% And while I'm at it, make it a tad nicer by allowing you to specify
 %% test names using a Name => Test map instead of {Name, Test} tuples.
 %% Also, make the setup optional, like how the cleanup is already.
+-spec test_case(TestCase | TestCases) -> Result when
+    TestCase :: #{
+        name => string(),
+        test := SimpleTestFun,
+        setup => Setup,
+        cleanup => Cleanup,
+        where => Where
+    },
+    TestCases :: #{
+        tests := [EUnitTestCase] | #{string() := SimpleTestFun},
+        setup => Setup,
+        cleanup => Cleanup,
+        where => Where
+    },
+    SimpleTestFun :: fun(() -> any()),
+    EUnitTestCase :: SimpleTestFun | {string(), SimpleTestFun},
+    Setup :: fun(() -> SetupResturn),
+    Cleanup :: fun((SetupResturn) -> any()),
+    Where :: local | spawn | {spawn, node()},
+    Foreach ::
+        {foreach, Where, Setup, Cleanup, Tests}
+        | {foreach, Setup, Cleanup, Tests}
+        | {foreach, Where, Setup, Tests}
+        | {foreach, Setup, Tests},
+    Result :: [EUnitTestCase] | Foreach.
 test_case(#{name := Name, test := Test} = Options) ->
     test_case(
         maps:without([name, test], Options#{
