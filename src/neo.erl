@@ -43,6 +43,7 @@
     group_by/2,
     group_unique_by/2,
     group_unique_by/3,
+    has/2,
     key_delete/3,
     key_find/3,
     key_get/2,
@@ -157,6 +158,19 @@ to_list(Other) ->
 
 %% @doc Creates a new map, for compatibility with {@link eon}.
 new() -> #{}.
+
+%% @doc Returns `true' if the given `Collection' contains the given `Lookup'.
+-spec has(Collection, Lookup) -> boolean() when
+    Collection :: collection(Key, Value),
+    Lookup :: Key | pos_integer(),
+    Key :: key(),
+    Value :: any().
+has(Map, Key) when is_map(Map) ->
+    maps:is_key(Key, Map);
+has(Object, Key) when ?is_ordset(Object) andalso ?is_key(Key) ->
+    lists:keymember(Key, 1, Object);
+has(List, Index) when is_list(List) andalso is_integer(Index) ->
+    Index =< length(List).
 
 %% @doc Returns the value associated with `Key' if given a map
 %%      returns the value associated with `Key' if given a proplist and
