@@ -66,6 +66,8 @@
     pop/2,
     set/3,
     to_list/1,
+    update_with/3,
+    update_with/4,
     with/2,
     without/2
 ]).
@@ -342,6 +344,35 @@ dset(Map, Path, Value) when is_atom(Path) orelse is_binary(Path) ->
     dset_internal(Map, PathParts, Value);
 dset(Map, Path, Value) ->
     dset_internal(Map, Path, Value).
+
+%% @doc Updates the `Key' in `Collection' using `Fun', or fails with
+%% `{badkey, Lookup}' if `Collection' does not have an association for `Key'.
+update_with(Map, Key, Fun) when is_map(Map) andalso is_function(Fun, 1) ->
+    maps:update_with(Key, Fun, Map);
+update_with(Object, Key, Fun) when ?is_ordset(Object) andalso ?is_key(Key) andalso is_function(Fun, 1) ->
+    OrderedDictionary = orddict:from_list(Object),
+    case orddict:is_key(Key, Object) of
+        true -> orddict:update(Key, Fun, OrderedDictionary);
+        false -> error({badkey, Key})
+    end;
+update_with(List, Index, Fun) when is_integer(Index) andalso Index =< length(List) andalso is_function(Fun, 1) ->
+    set(List, Index, Fun(lists:nth(Index, List)));
+update_with(List, Index, Fun) when is_list(List) andalso is_function(Fun, 1) ->
+    error({badkey, Index}).
+
+%% @doc Updates the `Key' in `Collection' using `Fun', or sets it to `Default'
+%% if `Collection' does not have an association for `Key'.
+update_with(Map, Key, Default, Fun) when is_map(Map) andalso is_function(Fun, 1) ->
+    maps:update_with(Key, Fun, Default, Map);
+update_with(Object, Key, Default, Fun) when ?is_ordset(Object) andalso ?is_key(Key) andalso is_function(Fun, 1) ->
+    OrderedDictionary = orddict:from_list(Object),
+    orddict:update(Key, Fun, Default, OrderedDictionary);
+update_with(List, Index, _Default, Fun) when
+    is_integer(Index) andalso Index =< length(List) andalso is_function(Fun, 1)
+->
+    set(List, Index, Fun(lists:nth(Index, List)));
+update_with(List, Index, Default, Fun) when is_list(List) andalso is_integer(Index) andalso is_function(Fun, 1) ->
+    set(List, Index, Default).
 
 %% @doc Returns the given map, proplist or plain list without the element
 %% associated with the given `Key' or `Index' if it exists.
