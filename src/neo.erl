@@ -63,6 +63,7 @@
     merge/1,
     merge/2,
     new/0,
+    partition/2,
     pop/2,
     set/3,
     to_list/1,
@@ -716,6 +717,25 @@ with(Map, Keys) ->
 -spec without(#{Key => _}, [Key]) -> map().
 without(Map, Keys) ->
     maps:without(Keys, Map).
+
+%% @doc Partitions the given collection into two, where the first contains all
+%% elements for which `Predicate' returns `true', and the second contains all
+%% elements for which `Predicate' returns `false'.
+partition(Map, Predicate) when is_map(Map) andalso is_function(Predicate, 2) ->
+    maps:fold(
+        fun(Key, Value, {True, False}) ->
+            case Predicate(Key, Value) of
+                true -> {True#{Key => Value}, False};
+                false -> {True, False#{Key => Value}}
+            end
+        end,
+        {#{}, #{}},
+        Map
+    );
+partition(Object, Predicate) when ?is_ordset(Object) andalso is_function(Predicate, 2) ->
+    lists:partition(fun({Key, Value}) -> Predicate(Key, Value) end, Object);
+partition(List, Predicate) when is_list(List) andalso is_function(Predicate, 1) ->
+    lists:partition(Predicate, List).
 
 %%%_* Private functions ------------------------------------------------------
 split_path_parts(Path) when is_binary(Path) ->
