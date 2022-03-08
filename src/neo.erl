@@ -73,6 +73,10 @@
     without/2
 ]).
 
+-export([
+    format_error/2
+]).
+
 %%%_ * Types ------------------------------------------------------------------
 
 -export_type([
@@ -108,6 +112,10 @@
     (length(Object) =:= 0 orelse
         (tuple_size(hd(Object)) =:= 2 andalso
             ?is_key(element(1, hd(Object)))))
+).
+
+-define(raiseBadkey(Lookup, Arguments),
+    error(badkey, Arguments, [{error_info, #{}}])
 ).
 
 %%%_* Code ====================================================================
@@ -228,7 +236,7 @@ get(List, Index) when is_list(List) andalso is_integer(Index) ->
 get_(Collection, Lookup) ->
     case get(Collection, Lookup) of
         {ok, Value} -> Value;
-        {error, notfound} -> error({badkey, Lookup})
+        {error, notfound} -> ?raiseBadkey(Lookup, [Collection, Lookup])
     end.
 
 %% @doc Like `get/2' expect it also accepts an `Default' value which is
@@ -265,7 +273,7 @@ get(Collection, Lookup, Default) ->
 dget_(Collection, Lookup) ->
     case dget(Collection, Lookup) of
         {ok, Value} -> Value;
-        {error, notfound} -> error({badkey, Lookup})
+        {error, notfound} -> ?raiseBadkey(Lookup, [Collection, Lookup])
     end.
 
 %% @doc Like `get/2', except it accepts either a dot separated path in a
@@ -354,12 +362,12 @@ update_with(Object, Key, Fun) when ?is_ordset(Object) andalso ?is_key(Key) andal
     OrderedDictionary = orddict:from_list(Object),
     case orddict:is_key(Key, Object) of
         true -> orddict:update(Key, Fun, OrderedDictionary);
-        false -> error({badkey, Key})
+        false -> ?raiseBadkey(Key, [Object, Key, Fun])
     end;
 update_with(List, Index, Fun) when is_integer(Index) andalso Index =< length(List) andalso is_function(Fun, 1) ->
     set(List, Index, Fun(lists:nth(Index, List)));
 update_with(List, Index, Fun) when is_list(List) andalso is_function(Fun, 1) ->
-    error({badkey, Index}).
+    ?raiseBadkey(Index, [List, Index, Fun]).
 
 %% @doc Updates the `Key' in `Collection' using `Fun', or sets it to `Default'
 %% if `Collection' does not have an association for `Key'.
@@ -587,8 +595,7 @@ map(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
     ]).
 
 %% @doc Similar to `map_values/2', except over the map's keys.
--spec map_keys(#{InputKey => Value}, Fun) -> #{OutputKey => Value} when
-    Fun :: fun((InputKey, Value) -> OutputKey).
+-spec map_keys(#{InputKey => Value}, Fun) -> #{OutputKey => Value} when Fun :: fun((InputKey, Value) -> OutputKey).
 map_keys(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
     maps:from_list([
         {Fun(Key, Value), Value}
@@ -596,8 +603,7 @@ map_keys(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
     ]).
 
 %% @doc Same as `maps:map/2'.
--spec map_values(#{Key => InputValue}, Fun) -> #{Key => OutputValue} when
-    Fun :: fun((Key, InputValue) -> OutputValue).
+-spec map_values(#{Key => InputValue}, Fun) -> #{Key => OutputValue} when Fun :: fun((Key, InputValue) -> OutputValue).
 map_values(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
     maps:map(Fun, Map).
 
@@ -742,6 +748,29 @@ partition(Object, Predicate) when ?is_ordset(Object) andalso is_function(Predica
     lists:partition(fun({Key, Value}) -> Predicate(Key, Value) end, Object);
 partition(List, Predicate) when is_list(List) andalso is_function(Predicate, 1) ->
     lists:partition(Predicate, List).
+
+%% @doc Callback for extended error information
+%%
+%% See https://www.erlang.org/eeps/eep-0054.html
+-spec format_error(Reason, StackTrace) -> ErrorMap when
+    Reason :: term(),
+    StackTrace :: erlang:stacktrace(),
+    ErrorMap :: #{pos_integer() => unicode:chardata()}.
+format_error(badkey, [{?MODULE, _Function, [Collection | _Arguments], _Info} | _]) ->
+    CollectionType =
+        if
+            is_map(Collection) -> <<"map">>;
+            ?is_ordset(Collection) -> <<"ordset">>;
+            is_list(Collection) -> <<"list">>
+        end,
+    #{
+        1 => <<"not present in ", CollectionType/binary>>
+    };
+format_error(badkey, [{_Moduke, _Function, _Arguments, _Info} | _]) ->
+    %% Boilerplate for future expansion, also see erl_stdlib_errors' implementation.
+    %% ErrorInfoMap = proplists:get_value(error_info, Info, #{}),
+    %% Cause = maps:get(cause, ErrorInfoMap, none),
+    #{}.
 
 %%%_* Private functions ------------------------------------------------------
 split_path_parts(Path) when is_binary(Path) ->
@@ -920,9 +949,9 @@ get__test_() ->
 
 get_failure_test_() ->
     [
-        ?_assertError({badkey, missing}, get_(#{key => value}, missing)),
-        ?_assertError({badkey, missing}, get_([{key, value}], missing)),
-        ?_assertError({badkey, 10}, get_([a, b, c], 10))
+        ?_assertError(badkey, get_(#{key => value}, missing)),
+        ?_assertError(badkey, get_([{key, value}], missing)),
+        ?_assertError(badkey, get_([a, b, c], 10))
     ].
 
 group_by_test_() ->
