@@ -578,6 +578,8 @@ key_take([], _Key, _Value) ->
     false.
 
 %% @doc Returns the map transformed using the given function.
+-spec map(#{InputKey => InputValue}, Fun) -> #{OutputKey => OutputValue} when
+    Fun :: fun((InputKey, InputValue) -> {OutputKey, OutputValue}).
 map(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
     maps:from_list([
         Fun(Key, Value)
@@ -585,6 +587,8 @@ map(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
     ]).
 
 %% @doc Similar to `map_values/2', except over the map's keys.
+-spec map_keys(#{InputKey => Value}, Fun) -> #{OutputKey => Value} when
+    Fun :: fun((InputKey, Value) -> OutputKey).
 map_keys(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
     maps:from_list([
         {Fun(Key, Value), Value}
@@ -592,6 +596,8 @@ map_keys(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
     ]).
 
 %% @doc Same as `maps:map/2'.
+-spec map_values(#{Key => InputValue}, Fun) -> #{Key => OutputValue} when
+    Fun :: fun((Key, InputValue) -> OutputValue).
 map_values(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
     maps:map(Fun, Map).
 
