@@ -358,13 +358,17 @@ dset(Map, Path, Value) ->
 %% `{badkey, Lookup}' if `Collection' does not have an association for `Key'.
 update_with(Map, Key, Fun) when is_map(Map) andalso is_function(Fun, 1) ->
     maps:update_with(Key, Fun, Map);
-update_with(Object, Key, Fun) when ?is_ordset(Object) andalso ?is_key(Key) andalso is_function(Fun, 1) ->
+update_with(Object, Key, Fun) when
+    ?is_ordset(Object) andalso ?is_key(Key) andalso is_function(Fun, 1)
+->
     OrderedDictionary = orddict:from_list(Object),
     case orddict:is_key(Key, Object) of
         true -> orddict:update(Key, Fun, OrderedDictionary);
         false -> ?raiseBadkey(Key, [Object, Key, Fun])
     end;
-update_with(List, Index, Fun) when is_integer(Index) andalso Index =< length(List) andalso is_function(Fun, 1) ->
+update_with(List, Index, Fun) when
+    is_integer(Index) andalso Index =< length(List) andalso is_function(Fun, 1)
+->
     set(List, Index, Fun(lists:nth(Index, List)));
 update_with(List, Index, Fun) when is_list(List) andalso is_function(Fun, 1) ->
     ?raiseBadkey(Index, [List, Index, Fun]).
@@ -373,14 +377,18 @@ update_with(List, Index, Fun) when is_list(List) andalso is_function(Fun, 1) ->
 %% if `Collection' does not have an association for `Key'.
 update_with(Map, Key, Default, Fun) when is_map(Map) andalso is_function(Fun, 1) ->
     maps:update_with(Key, Fun, Default, Map);
-update_with(Object, Key, Default, Fun) when ?is_ordset(Object) andalso ?is_key(Key) andalso is_function(Fun, 1) ->
+update_with(Object, Key, Default, Fun) when
+    ?is_ordset(Object) andalso ?is_key(Key) andalso is_function(Fun, 1)
+->
     OrderedDictionary = orddict:from_list(Object),
     orddict:update(Key, Fun, Default, OrderedDictionary);
 update_with(List, Index, _Default, Fun) when
     is_integer(Index) andalso Index =< length(List) andalso is_function(Fun, 1)
 ->
     set(List, Index, Fun(lists:nth(Index, List)));
-update_with(List, Index, Default, Fun) when is_list(List) andalso is_integer(Index) andalso is_function(Fun, 1) ->
+update_with(List, Index, Default, Fun) when
+    is_list(List) andalso is_integer(Index) andalso is_function(Fun, 1)
+->
     set(List, Index, Default).
 
 %% @doc Returns the given map, proplist or plain list without the element
@@ -595,7 +603,8 @@ map(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
     ]).
 
 %% @doc Similar to `map_values/2', except over the map's keys.
--spec map_keys(#{InputKey => Value}, Fun) -> #{OutputKey => Value} when Fun :: fun((InputKey, Value) -> OutputKey).
+-spec map_keys(#{InputKey => Value}, Fun) -> #{OutputKey => Value} when
+    Fun :: fun((InputKey, Value) -> OutputKey).
 map_keys(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
     maps:from_list([
         {Fun(Key, Value), Value}
@@ -603,7 +612,8 @@ map_keys(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
     ]).
 
 %% @doc Same as `maps:map/2'.
--spec map_values(#{Key => InputValue}, Fun) -> #{Key => OutputValue} when Fun :: fun((Key, InputValue) -> OutputValue).
+-spec map_values(#{Key => InputValue}, Fun) -> #{Key => OutputValue} when
+    Fun :: fun((Key, InputValue) -> OutputValue).
 map_values(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
     maps:map(Fun, Map).
 
@@ -744,7 +754,9 @@ partition(Map, Predicate) when is_map(Map) andalso is_function(Predicate, 2) ->
         {#{}, #{}},
         Map
     );
-partition(Object, Predicate) when ?is_ordset(Object) andalso is_function(Predicate, 2) ->
+partition(Object, Predicate) when
+    ?is_ordset(Object) andalso is_function(Predicate, 2)
+->
     lists:partition(fun({Key, Value}) -> Predicate(Key, Value) end, Object);
 partition(List, Predicate) when is_list(List) andalso is_function(Predicate, 1) ->
     lists:partition(Predicate, List).
@@ -810,7 +822,8 @@ ddelete_internal(OuterObject, [Key | Path]) ->
             OuterObject
     end.
 
--spec key_to_value_map_tuple_list([Map], Key) -> [{Value, Map}] when Map :: #{Key => Value}.
+-spec key_to_value_map_tuple_list([Map], Key) -> [{Value, Map}] when
+    Map :: #{Key => Value}.
 key_to_value_map_tuple_list(Maps, Key) ->
     [
         {Value, Map}
@@ -1033,7 +1046,12 @@ key_replace_test_() ->
                 [#{key => target, unrelated => 123}],
             [[#{key => target, unrelated => 123}], key, target, #{replacement => map}] =>
                 [#{replacement => map}],
-            [[#{key => target}, #{unrelated => 123}], key, target, #{replacement => map}] =>
+            [
+                [#{key => target}, #{unrelated => 123}],
+                key,
+                target,
+                #{replacement => map}
+            ] =>
                 [#{replacement => map}, #{unrelated => 123}]
         }
     ).
