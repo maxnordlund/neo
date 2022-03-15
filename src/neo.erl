@@ -356,13 +356,15 @@ dset(Map, Path, Value) ->
 
 %% @doc Updates the `Key' in `Collection' using `Fun', or fails with
 %% `{badkey, Lookup}' if `Collection' does not have an association for `Key'.
-update_with(Map, Key, Fun) when is_map(Map) andalso is_function(Fun, 1) ->
+update_with(Map, Key, Fun) when is_map_key(Key, Map) andalso is_function(Fun, 1) ->
     maps:update_with(Key, Fun, Map);
+update_with(Map, Key, Fun) when is_map(Map) andalso is_function(Fun, 1) ->
+    ?raiseBadkey(Key, [Map, Key, Fun]);
 update_with(Object, Key, Fun) when
     ?is_ordset(Object) andalso ?is_key(Key) andalso is_function(Fun, 1)
 ->
     OrderedDictionary = orddict:from_list(Object),
-    case orddict:is_key(Key, Object) of
+    case orddict:is_key(Key, OrderedDictionary) of
         true -> orddict:update(Key, Fun, OrderedDictionary);
         false -> ?raiseBadkey(Key, [Object, Key, Fun])
     end;
@@ -914,6 +916,29 @@ zip([A | As], [B | Bs]) -> [{A, B} | zip(As, Bs)].
         [#{<<"first">> => object}, #{<<"second">> => object}]
 ).
 
+readme_version_in_sync_with_app_test() ->
+    application:load(neo),
+    Applications = application:loaded_applications(),
+    {neo, _Description, Version} = lists:keyfind(neo, 1, Applications),
+    {ok, Readme} = file:read_file(
+        filename:join(filename:dirname(?FILE), "../README.md")
+    ),
+    Result = re:run(
+        Readme,
+        "{neo, {git, \"git@github.com:kivra/neo.git\", {tag, \"((?:\\d+\\.){2}\\d)\"}}}",
+        [{capture, all_but_first, list}]
+    ),
+    ?assertNotEqual(
+        nomatch,
+        Result,
+        "README.md must contain an example of using neo with rebar3 as a git dependency"
+    ),
+    ?assertMatch(
+        {match, [Version]},
+        Result,
+        "the version in README.md must match the one in src/neo.app.src"
+    ).
+
 from_list_test_() ->
     ?function_test(
         from_list(Map),
@@ -1341,5 +1366,34 @@ deep_map_keys_test_() ->
                 }
         }
     ).
+
+update_with_test_() ->
+    Fun = fun(N) -> N * 2 end,
+    ?function_test(
+        update_with(Map, Key, Fun),
+        [Map, Key],
+        #{
+            [#{key => 1}, key] => #{key => 2},
+            [#{a => 1, b => 1}, a] => #{a => 2, b => 1},
+            [[{key, 1}], key] => [{key, 2}],
+            [[{a, 1}, {b, 2}], a] => [{a, 2}, {b, 2}],
+            [[1], 1] => [2],
+            [[1, 2, 3], 2] => [1, 4, 3],
+            [[{<<"xyz">>, 1}, {<<"abc">>, 2}], <<"abc">>] => [
+                {<<"abc">>, 4}, {<<"xyz">>, 1}
+            ]
+        }
+    ).
+
+update_with_failure_test_() ->
+    Fun = fun(N) -> N * 2 end,
+    [
+        ?_assertError(badkey, update_with(#{}, key, Fun)),
+        ?_assertError(badkey, update_with(#{a => 1}, key, Fun)),
+        ?_assertError(badkey, update_with([], key, Fun)),
+        ?_assertError(badkey, update_with([{a, 1}], key, Fun)),
+        ?_assertError(badkey, update_with([], 10, Fun)),
+        ?_assertError(badkey, update_with([1, 2, 3], 10, Fun))
+    ].
 
 -endif.

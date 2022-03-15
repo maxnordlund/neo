@@ -8,7 +8,7 @@ Add it to your [`rebar.config`'s `deps`][3] and run `rebar3 compile --deps_only`
 
 ```erlang
 {deps, [
-    {neo, {git, "git@github.com:kivra/neo.git", {tag, "1.0.0"}}}
+    {neo, {git, "git@github.com:kivra/neo.git", {tag, "1.0.1"}}}
 ]}.
 ```
 
