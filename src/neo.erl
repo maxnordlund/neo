@@ -93,17 +93,27 @@
 %%%_ * Types ==================================================================
 
 -type key() :: atom() | binary().
+%% A key used in a {@link collection()} based on an {@link orddict} or {@link maps. map}.
 
 -type proplist(A, B) :: [{A, B}].
+%% An {@link proplists:unfold/1. unfolded} proplist. Can also be viewed as an
+%% {@link orddict. unordered dictionary}.
 
 -type proplist() :: proplist(key(), term()).
+%% A {@link proplist()} from {@link key()} to any term.
 
 -type collection(Key, Value) ::
     #{Key := Value | collection(Key, Value)}
     | proplist(Key, Value | collection(Key, Value))
     | [Value | collection(Key, Value)].
+%% Either an {@link orddict}, {@link maps. map}, or plain list. Each may be
+%% recursive to allow for deeply nested structures.
+%%
+%% @see dget/2
+%% @see dset/3
 
 -type collection() :: collection(key(), term()).
+%% A {@link collection()} from {@link key()} to any term.
 
 %%%_* Macros ==================================================================
 -define(is_key(Key), (is_atom(Key) orelse is_binary(Key))).
