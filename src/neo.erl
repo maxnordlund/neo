@@ -60,6 +60,7 @@
     map/2,
     map_keys/2,
     map_values/2,
+    mapfold/3,
     merge/1,
     merge/2,
     new/0,
@@ -606,6 +607,9 @@ key_take([], _Key, _Value) ->
     false.
 
 %% @doc Returns the map transformed using the given function.
+%%
+%% Unlike {@link maps:map/2}, this allows for changing the key as well as the
+%% value.
 -spec map(#{InputKey => InputValue}, Fun) -> #{OutputKey => OutputValue} when
     Fun :: fun((InputKey, InputValue) -> {OutputKey, OutputValue}).
 map(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
@@ -719,6 +723,70 @@ deep_flatten(Map) ->
 %% @private
 deep_flattener(Key, Value, List) ->
     [{Key, Value} | List].
+
+%% @doc Like {@link lists:mapfoldl/3}, except it works on `maps' and `orddicts'.
+%%
+%% If `Fun' has arity 2 this becomes equivalent to {@link lists:mapfoldl/3}
+%% over a plain list, or if given a {@link maps. map} over the results of
+%% {@link maps:to_list/1}.
+%%
+%% If `Fun' has arity 3 then this becomes more similar to {@link maps:fold/3},
+%% where the `Fun' takes the `Key' as the first parameter. For plain lists,
+%% which has no explicit keys, this will use the elements index as the key.
+-spec mapfold(Collection, Init, Fun) -> Result when
+    Collection :: collection(InputKey, InputValue),
+    Init :: term(),
+    Fun :: KeyValueFun | ValueFun,
+    KeyValueFun :: fun((InputKey, InputValue, Accumulator) -> FunReturn),
+    ValueFun :: fun((InputValue, Accumulator) -> FunReturn),
+    FunReturn :: {OutputKey, OutputValue, Accumulator} | {OutputValue, Accumulator},
+    Result :: {collection(OutputKey, OutputValue), Accumulator}.
+mapfold(Map, Init, Fun) when is_function(Fun, 3) andalso is_map(Map) ->
+    maps:fold(
+        fun(Key, Value0, {OutputMap, Accumulator0}) ->
+            case Fun(Key, Value0, Accumulator0) of
+                {Value1, Accumulator1} ->
+                    {OutputMap#{Key => Value1}, Accumulator1};
+                {NewKey, Value1, Accumulator1} ->
+                    {OutputMap#{NewKey => Value1}, Accumulator1}
+            end
+        end,
+        {#{}, Init},
+        Map
+    );
+mapfold(Object, Init, Fun) when is_function(Fun, 3) andalso ?is_ordset(Object) ->
+    lists:mapfoldl(
+        fun({Key, Value0}, Accumulator0) ->
+            case Fun(Key, Value0, Accumulator0) of
+                {Value1, Accumulator1} ->
+                    {{Key, Value1}, Accumulator1};
+                {NewKey, Value1, Accumulator1} ->
+                    {{NewKey, Value1}, Accumulator1}
+            end
+        end,
+        Init,
+        Object
+    );
+mapfold(List0, Init, Fun) when is_function(Fun, 3) andalso is_list(List0) ->
+    {List1, {_LastIndex, Accumulator2}} = lists:mapfoldl(
+        fun(Element0, {Index, Accumulator0}) ->
+            {Element1, Accumulator1} = Fun(Index, Element0, Accumulator0),
+            {Element1, {Index + 1, Accumulator1}}
+        end,
+        {1, Init},
+        List0
+    ),
+    {List1, Accumulator2};
+mapfold(Map, Init, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
+    maps:fold(
+        fun(Key, Value, Accumulator) ->
+            Fun({Key, Value}, Accumulator)
+        end,
+        Init,
+        Map
+    );
+mapfold(List, Init, Fun) when is_function(Fun, 2) andalso is_list(List) ->
+    lists:mapfoldl(Fun, Init, List).
 
 %% @doc Like `merge/2', merging each map in `Maps' left-to-right.
 merge(Maps) when is_map(hd(Maps)) ->
@@ -1278,6 +1346,28 @@ fold_test_() ->
             [[{a, 1}, {b, 2}, {c, 3}]] => 6
         }
     ).
+
+-define(mapfold_test(Collection, Init, Fun, Expected),
+    {neo_test_helpers:format("mapfold(~p, ~p, ~s)", [Collection, Init, ??Fun]), fun() ->
+        ?assertEqual(Expected, mapfold(Collection, Init, Fun))
+    end}
+).
+mapfold_test_() ->
+    Map = #{a => 1, b => 2, c => 3},
+    Object = maps:to_list(Map),
+    List = [1, 2, 3],
+    [
+        ?mapfold_test(List, 0, fun mapfold_sum/2, {[2, 4, 6], 6}),
+        ?mapfold_test(List, 0, fun mapfold_sum/3, {[2, 4, 6], 6}),
+        ?mapfold_test(Map, 0, fun mapfold_sum/3, {#{a => 2, b => 4, c => 6}, 6}),
+        ?mapfold_test(Map, '_', fun mapfold_invert/3, {#{1 => a, 2 => b, 3 => c}, '_'}),
+        ?mapfold_test(Object, 0, fun mapfold_sum/3, {[{a, 2}, {b, 4}, {c, 6}], 6}),
+        ?mapfold_test(Object, '_', fun mapfold_invert/3, {[{1, a}, {2, b}, {3, c}], '_'})
+    ].
+
+mapfold_sum(X, Sum) -> {X * 2, X + Sum}.
+mapfold_sum(_, X, Sum) -> {X * 2, X + Sum}.
+mapfold_invert(Key, X, _) -> {X, Key, '_'}.
 
 zip_test_() ->
     [
