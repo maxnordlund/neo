@@ -676,25 +676,47 @@ deep_filter_map(Map, Fun) when is_function(Fun, 2) andalso is_map(Map) ->
         )
     ).
 
+%% @doc Like {@link maps:fold/3} or {@link lists:foldl/3}
 fold(Map, Init, Fun) when is_function(Fun, 3) andalso is_map(Map) ->
-    maps:fold(Fun, Init, Map).
+    maps:fold(Fun, Init, Map);
+fold(Object, Init, Fun) when is_function(Fun, 3) andalso ?is_ordset(Object) ->
+    lists:foldl(
+        fun({Key, Value}, Accumulator) ->
+            Fun(Key, Value, Accumulator)
+        end,
+        Init,
+        Object
+    );
+fold(List, Init, Fun) when is_function(Fun, 3) andalso is_list(List) ->
+    {_LastIndex, Result} = lists:foldl(
+        fun(Element, {Index, Accumulator}) ->
+            {Index + 1, Fun(Index, Element, Accumulator)}
+        end,
+        {1, Init},
+        List
+    ),
+    Result.
 
-deep_fold(Map, Init, Fun) when is_function(Fun, 3) andalso is_map(Map) ->
-    maps:fold(
+%% @doc Like {@link fold/3} but recursively.
+deep_fold(Object, Init, Fun) when is_function(Fun, 3) ->
+    fold(
+        Object,
+        Init,
         fun
-            (Key, Value, Acc0) when is_map(Value) ->
+            (Key, Value, Acc0) when is_map(Value) orelse ?is_ordset(Value) ->
                 Acc1 = deep_fold(Value, Acc0, Fun),
                 Fun(Key, Value, Acc1);
             (Key, Value, Acc0) ->
                 Fun(Key, Value, Acc0)
-        end,
-        Init,
-        Map
+        end
     ).
 
+%% @doc Like {@link lists:flatten/1} except it accepts all neo
+%% {@link collections()}.
 deep_flatten(Map) ->
     lists:reverse(deep_fold(Map, [], fun deep_flattener/3)).
 
+%% @private
 deep_flattener(Key, Value, List) ->
     [{Key, Value} | List].
 
@@ -1243,6 +1265,17 @@ dset_test_() ->
                 #{top => [target]},
             [#{}, [top, 1, key], target] =>
                 #{top => [#{key => target}]}
+        }
+    ).
+
+fold_test_() ->
+    Init = 0,
+    ?function_test(
+        fold(Collection, Init, fun(_Key, Value, Sum) -> Value + Sum end),
+        [Collection],
+        #{
+            [#{a => 1, b => 2, c => 3}] => 6,
+            [[{a, 1}, {b, 2}, {c, 3}]] => 6
         }
     ).
 
