@@ -926,28 +926,46 @@ zip([A | As], [B | Bs]) -> [{A, B} | zip(As, Bs)].
         [#{<<"first">> => object}, #{<<"second">> => object}]
 ).
 
-readme_version_in_sync_with_app_test() ->
-    application:load(neo),
-    Applications = application:loaded_applications(),
-    {neo, _Description, Version} = lists:keyfind(neo, 1, Applications),
-    {ok, Readme} = file:read_file(
-        filename:join(filename:dirname(?FILE), "../README.md")
-    ),
-    Result = re:run(
-        Readme,
-        "{neo, {git, \"git@github.com:kivra/neo.git\", {tag, \"((?:\\d+\\.){2}\\d)\"}}}",
-        [{capture, all_but_first, list}]
-    ),
-    ?assertNotEqual(
-        nomatch,
-        Result,
-        "README.md must contain an example of using neo with rebar3 as a git dependency"
-    ),
-    ?assertMatch(
-        {match, [Version]},
-        Result,
-        "the version in README.md must match the one in src/neo.app.src"
-    ).
+app_version_in_sync_test_() ->
+    neo_test_helpers:test_case(#{
+        setup => fun() ->
+            application:load(neo)
+        end,
+        tests => #{
+            "with the latest git tag" => fun() ->
+                Applications = application:loaded_applications(),
+                {neo, _Description, Version} = lists:keyfind(neo, 1, Applications),
+                GitVersion = ?cmd("git tag --list --sort=-version:refname | head -n1"),
+                ?assertEqual(
+                    GitVersion,
+                    Version ++ "\n",
+                    "the latest git tag must match the version in src/neo.app.src"
+                )
+            end,
+            "with the README" => fun() ->
+                Applications = application:loaded_applications(),
+                {neo, _Description, Version} = lists:keyfind(neo, 1, Applications),
+                {ok, Readme} = file:read_file(
+                    filename:join(filename:dirname(?FILE), "../README.md")
+                ),
+                Result = re:run(
+                    Readme,
+                    "{neo, {git, \"git@github.com:kivra/neo.git\", {tag, \"((?:\\d+\\.){2}\\d)\"}}}",
+                    [{capture, all_but_first, list}]
+                ),
+                ?assertNotEqual(
+                    nomatch,
+                    Result,
+                    "README.md must contain an example of using neo with rebar3 as a git dependency"
+                ),
+                ?assertMatch(
+                    {match, [Version]},
+                    Result,
+                    "the version in README.md must match the one in src/neo.app.src"
+                )
+            end
+        }
+    }).
 
 from_list_test_() ->
     ?function_test(
