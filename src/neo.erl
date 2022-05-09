@@ -145,15 +145,22 @@ from_list(Value) ->
 %% {@link maps:from_list/1} recursive cousin.
 %%
 %% You may also supply an options map with a `substitutions' map for replacing
-%% specific values while converting.
+%% specific values while converting. Instead of using a `substitutions' map,
+%% or in conjuction with one, you can supply a `transformations' map with
+%% `fun's to be called for specific keys.
 %%
 %% This way you can easily change the default behaviour of converting empty
 %% lists to empty maps by supplying a different (or no) `substitutions' map.
 %%
-%% Note that the substitutions are applied on all levels.
+%% You can also use this to preserve some subtree for being converted, or
+%% apply additional transformations. However, do note that the substitutions
+%% and transformations are applied on all levels. This means that if you given
+%% it an options map like this `#{transformations => #{user => fun ...}}', you
+%% will transform <em>all</em> `user' objects, on <em>any</em> level.
 -spec from_list(proplist(A, B), Options) -> #{A := B} when
     Options :: #{
-        substitutions => map()
+        substitutions => map(),
+        transformations => #{term() := fun((term()) -> term())}
     }.
 from_list(Value, #{substitutions := Substitutions}) when
     is_map_key(Value, Substitutions)
@@ -174,6 +181,11 @@ from_list(Other, _Options) ->
 
 %% @private
 %% @doc Helper for {@link from_list/2} for converting values of nested maps.
+from_list_internal_map_folder(
+    Key, Value, #{transformations := Transformations} = Options
+) when is_function(map_get(Key, Transformations), 1) ->
+    #{Key := Transformer} = Options,
+    {Transformer(Value), Options};
 from_list_internal_map_folder(_Key, Value, Options) ->
     {from_list(Value, Options), Options}.
 
