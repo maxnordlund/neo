@@ -9,7 +9,7 @@ Add it to your [`rebar.config`'s `deps`][3] and run
 
 ```erlang
 {deps, [
-    {neo, {git, "git@github.com:kivra/neo.git", {tag, "1.1.2"}}}
+    {neo, {git, "git@github.com:kivra/neo.git", {tag, "1.1.3"}}}
 ]}.
 ```
 
