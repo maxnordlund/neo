@@ -132,30 +132,50 @@
 %%%_* Code ====================================================================
 %%%_ * API --------------------------------------------------------------------
 
-%% @doc Returns a potentially nested map by recursively converting the given
-%% potentially nested key-value list.
+%% @doc Same as {@link from_list/2}, but empty lists, `[]', are converted to
+%% empty maps, `#{}', .
+-spec from_list(proplist(A, B)) -> #{A := B}.
+from_list(Value) ->
+    from_list(Value, #{substitutions => #{[] => #{}}}).
+
+%% @doc Returns the given list of key-value pairs as a map.
 %%
-%% This is effectively a recursive `maps:from_list'.
-%% Empty lists are converted to empty maps.
--spec from_list(proplist(A, B)) -> #{A => B}.
-from_list([]) ->
-    #{};
-from_list([{_Key, _Value} | _] = Proplist) ->
+%% The values may also be lists, or native maps, of nestex key-value pairs.
+%% All will be converted to native maps. You can view it as
+%% {@link maps:from_list/1} recursive cousin.
+%%
+%% You may also supply an options map with a `substitutions' map for replacing
+%% specific values while converting.
+%%
+%% This way you can easily change the default behaviour of converting empty
+%% lists to empty maps by supplying a different (or no) `substitutions' map.
+%%
+%% Note that the substitutions are applied on all levels.
+-spec from_list(proplist(A, B), Options) -> #{A := B} when
+    Options :: #{
+        substitutions => map()
+    }.
+from_list(Value, #{substitutions := Substitutions}) when
+    is_map_key(Value, Substitutions)
+->
+    maps:get(Value, Substitutions);
+from_list([{_Key, _Value} | _] = Proplist, Options) ->
     maps:from_list([
-        {Key, from_list(Value)}
+        {Key, from_list(Value, Options)}
      || {Key, Value} <- Proplist
     ]);
-from_list(List) when is_list(List) ->
-    lists:map(fun from_list/1, List);
-from_list(Map) when is_map(Map) ->
-    maps:map(fun from_list_map_value_mapper/2, Map);
-from_list(Other) ->
+from_list(List, Options) when is_list(List) ->
+    [from_list(Value, Options) || Value <- List];
+from_list(Map0, Options) when is_map(Map0) ->
+    {Map1, _Options} = mapfold(Map0, Options, fun from_list_internal_map_folder/3),
+    Map1;
+from_list(Other, _Options) ->
     Other.
 
 %% @private
-%% @doc Helper for {@link from_list/1} for converting values of nested maps.
-from_list_map_value_mapper(_Key, Value) ->
-    from_list(Value).
+%% @doc Helper for {@link from_list/2} for converting values of nested maps.
+from_list_internal_map_folder(_Key, Value, Options) ->
+    {from_list(Value, Options), Options}.
 
 %% @doc Returns a potentially nested proplist by recursively convert the given
 %% potentially nested map.
