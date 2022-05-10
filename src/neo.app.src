@@ -1,6 +1,6 @@
 {application, neo, [
     {description, "eon replacement using native maps"},
-    {vsn, "1.1.3"},
+    {vsn, "1.2.0"},
     {registered, []},
     {applications, [
         kernel,
