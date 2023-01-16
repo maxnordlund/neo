@@ -3,7 +3,7 @@
 %%% (nested) maps.
 %%%
 %%% Mimics the builtin `lists' and `maps' module, and is meant as a
-%%% replacement for `eon'.
+%%% replacement for {@link eon}.
 %%%
 %%% There are two main differences to `lists' `key*' functions. First they
 %%% are named using an underscore, `key_find' instead of `lists:keyfind'.
@@ -376,7 +376,7 @@ set(List, Index, Value) when 0 < Index andalso Index =< length(List) ->
     {Head, [_ExistingValue | Tail]} = lists:split(Index - 1, List),
     Head ++ [Value | Tail].
 
-%% @doc Like `set/2', except it accepts either a dot separated path in a
+%% @doc Like `set/3', except it accepts either a dot separated path in a
 %% binary for binary keys, dot separated atom for atom keys, or a list of
 %% explicit path elements.
 %%
@@ -529,7 +529,7 @@ group_unique_by(Maps, Key) ->
 %% associated with `Key' in each of the `Map's in `Maps'.
 %%
 %% This works like `group_unique_by/2' except it also accepts an sorting
-%% function like `lists:sort/3'.
+%% function like `lists:sort/2'.
 -spec group_unique_by([Map], Key, SorterFun) -> #{Value => Map} when
     Map :: #{Key => Value},
     SorterFun :: fun((A :: Map, B :: Map) -> boolean()).
@@ -749,7 +749,7 @@ deep_fold(Object, Init, Fun) when is_function(Fun, 3) ->
     ).
 
 %% @doc Like {@link lists:flatten/1} except it accepts all neo
-%% {@link collections()}.
+%% {@link collection(). collections}.
 deep_flatten(Map) ->
     lists:reverse(deep_fold(Map, [], fun deep_flattener/3)).
 
