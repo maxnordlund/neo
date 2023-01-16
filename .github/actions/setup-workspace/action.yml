@@ -1,0 +1,80 @@
+name: Setup workspace
+description: "Prepare the workspace for building"
+inputs:
+  plt:
+    description: If the local PLT should be fetched
+    # Boolean inputs aren't supported (yet)
+    # type: boolean
+    default: "false"
+  ssh_key:
+    description: "Private part of the SSH key"
+    required: true
+outputs:
+  otp-version:
+    description: Erlang/OTP version installed
+    value: ${{ steps.setup-beam.outputs.otp-version }}
+  elixir-version:
+    description: Elixir version installed
+    value: ${{ steps.setup-beam.outputs.elixir-version }}
+  rebar3-version:
+    description: Rebar3 version installed
+    value: ${{ steps.setup-beam.outputs.rebar3-version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Retrieve repository information
+      id: info
+      uses: ./.github/actions/info
+
+    - uses: erlef/setup-beam@v1
+      id: setup-beam
+      with:
+        version-file: .tool-versions
+        version-type: strict
+
+    - name: Configure SSH key
+      shell: bash
+      run: |
+        mkdir -p ~/.ssh && chmod 700 ~/.ssh
+        export SSH_AUTH_SOCK=/tmp/ssh_agent.sock
+        echo SSH_AUTH_SOCK=$SSH_AUTH_SOCK >> $GITHUB_ENV
+        ssh-agent -a $SSH_AUTH_SOCK > /dev/null
+        ssh-add - <<< "${{ inputs.ssh_key }}"
+
+    - name: Fetch dependencies from cache
+      uses: actions/cache@v3
+      id: cache-deps
+      with:
+        path: |
+          _build
+          !_build/*/lib/${{ steps.info.outputs.repository_name }}
+        key: deps-${{ github.ref_name }}-${{ steps.setup-beam.outputs.otp-version }}-${{ hashFiles('.tools-versions', 'rebar.*') }}
+        restore-keys: |
+          deps-${{ steps.info.outputs.default_branch }}-${{ steps.setup-beam.outputs.otp-version }}-${{ hashFiles('.tools-versions', 'rebar.*') }}
+          deps-${{ steps.info.outputs.default_branch }}-${{ steps.setup-beam.outputs.otp-version }}-
+          deps-${{ steps.info.outputs.default_branch }}-
+
+    - name: Fetch workspace
+      uses: actions/cache@v3
+      id: cache-workspace
+      with:
+        path: |
+          _build/*/lib/${{ steps.info.outputs.repository_name }}
+        key: workspace-${{ github.ref_name }}-${{ steps.setup-beam.outputs.otp-version }}
+        restore-keys: |
+          workspace-${{ steps.info.outputs.default_branch }}-${{ steps.setup-beam.outputs.otp-version }}
+          workspace-${{ steps.info.outputs.default_branch }}-
+
+    - name: Fetch PLT
+      # Boolean inputs aren't supported (yet), this fixes that and is future proof
+      if: ${{ contains(fromJSON('[true, "true"]'), inputs.plt) }}
+      uses: actions/cache@v3
+      id: cache-plt
+      with:
+        path: |
+          _build/default/*_plt
+        key: dialyzer-${{ github.ref_name }}-${{ steps.setup-beam.outputs.otp-version }}
+        restore-keys: |
+          dialyzer-${{ steps.info.outputs.default_branch }}-${{ steps.setup-beam.outputs.otp-version }}
+          dialyzer-${{ steps.info.outputs.default_branch }}-

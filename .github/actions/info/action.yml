@@ -1,0 +1,25 @@
+name: Retrieve repository information
+description: |
+  Retrieves information about the repository that is not available in the
+  `github` context.
+outputs:
+  repository_name:
+    description: |
+      The name of this repository. For example if `github.repository` is
+      `octocat/Hello-World` this would be `Hello-World`.
+    value: ${{ steps.info.outputs.repository_name }}
+  default_branch:
+    description: The default branch for this repository. For example `master`.
+    value: ${{ steps.info.outputs.default_branch }}
+
+runs:
+  using: composite
+  steps:
+    - name: Retrieve repository information
+      id: info
+      shell: bash
+      run: |
+        default_branch=${{ github.event.repository.default_branch }}
+        default_branch=${default_branch:-$$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)}
+        echo "default_branch=$default_branch" >> $GITHUB_OUTPUT
+        echo "repository_name=$(basename '${{ github.repository }}')" >> $GITHUB_OUTPUT
