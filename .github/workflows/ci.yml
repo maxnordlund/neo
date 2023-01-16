@@ -185,3 +185,43 @@ jobs:
         with:
           name: eunit.coverdata
           path: _build/test/cover/eunit.coverdata
+
+  coverage:
+    name: Coverage report
+    if: ${{ success() || failure() }}
+    needs: [eunit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-workspace
+        id: setup
+        with:
+          ssh_key: ${{ secrets.PRIVATE_SSH_KEY }}
+
+      - name: Download eunit.coverdata
+        uses: actions/download-artifact@v3
+        with:
+          name: eunit.coverdata
+          path: coverage
+
+      - name: Generate coverage report
+        run: |
+          mkdir -p _build/test/cover
+          mv coverage/eunit.coverdata _build/test/cover/
+          rebar3 cover
+          rebar3 covertool
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage
+          path: |
+            _build/test/cover/
+            _build/test/covertool/kivra_core.covertool.xml
+            !*.coverdata
+            !cover.log
