@@ -66,7 +66,10 @@ test_case(#{test := Test} = Options) ->
     );
 test_case(#{tests := Tests} = Options) when is_map(Tests) ->
     test_case(Options#{
-        tests => maps:to_list(Tests)
+        tests => [
+            {Name, test_case(#{tests => [Test]})}
+         || {Name, Test} <- maps:to_list(Tests)
+        ]
     });
 test_case(#{cleanup := _} = Options) when not is_map_key(setup, Options) ->
     %% Allow just cleanup, even though vanilla EUnit does not
