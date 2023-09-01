@@ -42,9 +42,10 @@ format(FormatString, Arguments) ->
     },
     SimpleTestFun :: fun(() -> any()),
     EUnitTestCase :: SimpleTestFun | {string(), SimpleTestFun},
-    Setup :: fun(() -> SetupResturn),
-    Cleanup :: fun((SetupResturn) -> any()),
+    Setup :: fun(() -> SetupReturn),
+    Cleanup :: fun((SetupReturn) -> any()),
     Where :: local | spawn | {spawn, node()},
+    Tests :: [EUnitTestCase],
     Foreach ::
         {foreach, Where, Setup, Cleanup, Tests}
         | {foreach, Setup, Cleanup, Tests}
