@@ -95,6 +95,20 @@ implementation_for(Tuple, Behaviours) when
     is_tuple(Tuple) andalso is_list(Behaviours)
 ->
     neo_tuples;
+implementation_for(Reference, Behaviours) when
+    is_reference(Reference) andalso is_list(Behaviours)
+->
+    try ets:info(cast_to_tid(Reference), id) of
+        undefined ->
+            %% It is a referene to a deleted ets table.
+            %% Treat it as an error.
+            error(badarg, [Reference, Behaviours]);
+        _Tid ->
+            neo_ets
+    catch
+        error:badarg ->
+            error(badarg, [Reference, Behaviours])
+    end;
 implementation_for(Term, Behaviours) when is_list(Behaviours) ->
     error(badarg, [Term, Behaviours]).
 
@@ -165,6 +179,17 @@ add_to_cache(Cache, Module, ImplementedBehaviours) ->
     persistent_term:put(?MODULE, Cache#{Module => ImplementedBehaviours}),
     add_to_cache(get_cache(), Module, ImplementedBehaviours).
 
+%% @doc Hack to convince Dialyzer that the given term can be an
+%% {@link ets:tid()}.
+%%
+%% Otherwise it complains that the call to `ets:info/1' will always fail, and
+%% that it breaks the opaques of the given tid.
+-compile({inline, cast_to_tid/1}).
+-dialyzer({nowarn_function, cast_to_tid/1}).
+-spec cast_to_tid(term()) -> ets:tid().
+cast_to_tid(Term) ->
+    Term.
+
 %%%_* Tests ==================================================================
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -176,6 +201,21 @@ implementation_for_test_() ->
         "Elixir struct" => ?_assertEqual(
             neo_maps, implementation_for(#{'__struct__' => neo_maps}, [neo_collection])
         ),
+        "ETS" => #{
+            "existing table" => fun() ->
+                Tid = ets:new('some table', []),
+                ?assertEqual(neo_ets, implementation_for(Tid, [neo_collection]))
+            end,
+            "deleted table" => fun() ->
+                DeletedTid = ets:new('some table', []),
+                ets:delete(DeletedTid),
+                ?assertError(badarg, implementation_for(DeletedTid, [neo_collection]))
+            end,
+            "non-tid reference" => fun() ->
+                BadTid = make_ref(),
+                ?assertError(badarg, implementation_for(BadTid, [neo_collection]))
+            end
+        },
         "records" => #{
             "with implementation" => ?_assertEqual(
                 neo_persistent_term,
