@@ -1,0 +1,313 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% @doc A behaviour for iterable data types.
+%%%
+%%% The core of this module builds upon {@link iterator/1} and {@link next/1}.
+%%% If you do not implement this, it will fall back to a generic one using
+%%% {@link neo_collection:keys/1} and {@link neo_collection:get/2}.
+%%%
+%%% This means users of this module does not need to worry about it, but for
+%%% optimal performance a specialized implementation should be provided.
+%%% @end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%_* Module declaration =====================================================
+-module(neo_iterable).
+
+%%%_* Exports ================================================================
+%%%_ * API -------------------------------------------------------------------
+-export([
+    iterator/1,
+    next/1
+]).
+
+-export([
+    filter/2,
+    filtermap/2,
+    fold/3,
+    foreach/2,
+    group/1,
+    map/2
+]).
+
+%%%_* Types ------------------------------------------------------------------
+-export_type([
+    iterator/0,
+    iterator/2,
+    iterator_state/2
+]).
+
+-export_type([
+    filter/2,
+    filter_mapper/3,
+    folder/3,
+    foreach_fun/2,
+    limit/0,
+    mapper/3
+]).
+
+%%%_* Callbacks ==============================================================
+%% This function is called to create an iterator for the given
+%% {@link t(). collection}.
+%%
+%% The returned value is considered an implementation detail of the
+%% implementing module.
+-callback iterator(neo_collection:t(Key, Value)) -> iterator_state(Key, Value).
+
+%% This function is called to retreive a `Key'-`Value' pair and the next
+%% {@link iterator_state(). internal iterator state} from the given
+%% {@link iterator_state(). internal iterator state}.
+%%
+%% @see next/1
+-callback next(iterator_state(Key, Value)) ->
+    {Key, Value, iterator_state(Key, Value)} | none.
+
+%%%_ * Optional callbacks ----------------------------------------------------
+-optional_callbacks([
+    iterator/1,
+    next/1
+]).
+
+%%%_* Includes ===============================================================
+-include("internal.hrl").
+
+%%%_* Macros =================================================================
+
+%%%_* Types ==================================================================
+-opaque iterator() :: iterator(Key :: term(), Value :: term()).
+
+-opaque iterator(Key, Value) :: {module(), iterator_state(Key, Value)}.
+%% Represents an iterator of some iterable, typically a
+%% {@link neo_collection:t()}. Is considered an implementation detail of this
+%% module.
+
+-type iterator_state(_Key, _Value) :: term().
+%% Represents the internal state of an {@link iterator()}.
+%%
+%% Used to implement {@link next/1}.
+
+-type mapper(Key, ValueIn, ValueOut) :: fun((Key, ValueIn) -> ValueOut).
+%% A mapping function, just like the first parameter of {@link maps:map/2}.
+
+-type filter(Key, Value) :: fun((Key, Value) -> boolean()).
+%% A filter function, just like the first parameter of {@link maps:filter/2}.
+
+-type filter_mapper(Key, ValueIn, ValueOut) ::
+    fun((Key, ValueIn) -> boolean() | {true, ValueIn | ValueOut}).
+%% A filter and mapping function, just like the first parameter of
+%% {@link maps:filtermap/2}.
+
+-type foreach_fun(Key, Value) :: fun((Key, Value) -> any()).
+%% A `fun' just like the first parameter of {@link maps:foreach/2}.
+
+-type folder(Accumulator, Key, Value) ::
+    fun((Accumulator, Key, Value) -> Accumulator).
+%% A folding function, similar like the first parameter of {@link maps:fold/3},
+%% except the `Accumulator' comes first.
+
+-type limit() :: pos_integer().
+%% Concurrency limit, aka the number of processes to keep in-flight.
+
+%%%_* Private ----------------------------------------------------------------
+
+%%%_* Code ===================================================================
+%%%_ * API -------------------------------------------------------------------
+
+%% @doc Returns an {@link iterator()} for the given
+%% {@link neo_collection:t(). collection}.
+-spec iterator(neo_collection:t(Key, Value)) -> iterator(Key, Value).
+iterator(Collection) ->
+    Module = implementation_for(Collection),
+    case neo_reflect:is_exported(Module, iterator, 1) of
+        true ->
+            {Module, Module:iterator(Collection)};
+        false ->
+            {?MODULE, neo_collection:keys(Collection), Collection}
+    end.
+
+%% @doc Returns a `Key'-`Value' pair and the next iterator, or `none' if the
+%% iterator is empty.
+-spec next(iterator(Key, Value)) -> {Key, Value, iterator(Key, Value)} | none.
+next({?MODULE, [], _Collection}) ->
+    none;
+next({?MODULE, [Key | Keys], Collection}) ->
+    {Key, neo_collection:get(Collection, Key), {?MODULE, Keys, Collection}};
+next({Module, Iterator}) ->
+    case Module:next(Iterator) of
+        {Key, Value, NextIterator} ->
+            {Key, Value, {Module, NextIterator}};
+        none ->
+            none
+    end.
+
+%% @doc Folds the given function over the given collection.
+%%
+%% It has the same order guarantees, or not, as the given collection.
+%%
+%% Like {@link maps:fold/3} but for an arbitrary {@link neo_collection:t().
+%% collection}.
+-spec fold(
+    neo_collection:t(Key, Value), InitialAccumulator, folder(Accumulator, Key, Value)
+) -> Accumulator when
+    InitialAccumulator :: Accumulator.
+fold(Collection, InitialAccumulator, Folder) when is_function(Folder, 3) ->
+    Module = implementation_for(Collection),
+    case neo_reflect:is_exported(Module, fold, 3) of
+        true ->
+            Module:fold(Collection, InitialAccumulator, Folder);
+        false ->
+            fold_internal(iterator(Collection), InitialAccumulator, Folder)
+    end.
+
+%% @private
+fold_internal(Iterator, Accumulator, Folder) ->
+    case next(Iterator) of
+        {Key, Value, NextIterator} ->
+            fold_internal(NextIterator, Folder(Accumulator, Key, Value), Folder);
+        none ->
+            Accumulator
+    end.
+
+%% @doc Maps the given `Mapper' `fun' over the given
+%% {@link neo_collection:t(). collection}.
+%%
+%% The results are returned with the same ordering guarantee, or not, as the
+%% underlying collection.
+-spec map(neo_collection:t(Key, ValueIn), mapper(Key, ValueIn, ValueOut)) ->
+    neo_collection:t(ValueOut, Key).
+map(Collection, Mapper) when ?is_callback(Mapper) ->
+    Module = implementation_for(Collection),
+    case neo_reflect:is_exported(Module, map, 2) of
+        true ->
+            Module:map(Collection, Mapper);
+        false ->
+            fold(Collection, neo_collection:new(Collection), fun(
+                Accumulator, Key, Value
+            ) ->
+                neo_collection:set(Accumulator, Key, ?call_callback(Mapper, Key, Value))
+            end)
+    end.
+
+%% @doc Returns a new {@link neo_collection:t(). collection} for each `Key'-`Value' pair in the given one where `Filter' returns true.
+-spec filter(neo_collection:t(Key, Value), filter(Key, Value)) ->
+    neo_collection:t(Key, Value).
+filter(Collection, Filter) when ?is_callback(Filter) ->
+    Module = implementation_for(Collection),
+    case neo_reflect:is_exported(Module, filter, 2) of
+        true ->
+            Module:filter(Collection, Filter);
+        false ->
+            fold(Collection, neo_collection:new(Collection), fun(
+                Accumulator, Key, Value
+            ) ->
+                case ?call_callback(Filter, Key, Value) of
+                    true ->
+                        neo_collection:set(Accumulator, Key, Value);
+                    false ->
+                        Accumulator
+                end
+            end)
+    end.
+
+%% @doc Maps the given `Mapper' `fun' in parallell over the given
+%% {@link neo_collection:t(). collection}.
+%%
+%% The `fun' must behave like the first parameter of {@link maps:filtermap/2}.
+%%
+%% It will have at most `Limit' number of mapping processes in flight at any
+%% given point in time.
+%%
+%% The results are returned in an undefined order.
+-spec filtermap(
+    neo_collection:t(Key, ValueIn), filter_mapper(Key, ValueIn, ValueOut)
+) -> neo_collection:t(Key, ValueIn | ValueOut).
+filtermap(Collection, FilterMapper) when ?is_callback(FilterMapper) ->
+    Module = implementation_for(Collection),
+    case neo_reflect:is_exported(Module, filtermap, 2) of
+        true ->
+            Module:filtermap(Collection, FilterMapper);
+        false ->
+            fold(Collection, neo_collection:new(Collection), fun(
+                Accumulator, Key, Value
+            ) ->
+                case ?call_callback(FilterMapper, Key, Value) of
+                    true ->
+                        neo_collection:set(Accumulator, Key, Value);
+                    {true, ValueOut} ->
+                        neo_collection:set(Accumulator, Key, ValueOut);
+                    false ->
+                        Accumulator
+                end
+            end)
+    end.
+
+%% @doc Calls given `fun' in parallell over the given
+%% {@link neo_collection:t(). collection}.
+%%
+%% It will have at most `Limit' number of processes in flight at any given
+%% point in time.
+%%
+%% The evaluation order is undefined.
+%%
+%% @see maps:foreach/2
+-spec foreach(neo_collection:t(Key, Value), foreach_fun(Key, Value)) -> ok.
+foreach(Collection, Fun) when ?is_callback(Fun) ->
+    Module = implementation_for(Collection),
+    case neo_reflect:is_exported(Module, foreach, 2) of
+        true ->
+            Module:foreach(Collection, Fun);
+        false ->
+            fold(Collection, ok, fun(ok, Key, Value) ->
+                ?call_callback(Fun, Key, Value),
+                ok
+            end)
+    end.
+
+-spec group(Collection) -> neo_collection:t(Key, list(Value)) when
+    Collection :: neo_collection:t(Key, neo_collection:t(Key, Value)).
+group(Collection) ->
+    map(
+        fold(Collection, neo_collection:new(Collection), fun group_internal/3),
+        fun reverse_list_value/2
+    ).
+
+%% @private
+group_internal(Groups0, Key, InnerCollection) ->
+    Values0 = neo_collection:get(Groups0, Key, []),
+    Groups1 = neo_collection:set(Groups0, Key, Values0),
+    fold(InnerCollection, Groups1, fun group_internal_inner/3).
+
+%% @private
+group_internal_inner(Groups, Key, Value) ->
+    Values0 = neo_collection:get(Groups, Key, []),
+    neo_collection:set(Groups, Key, [Value | Values0]).
+
+%% @private
+reverse_list_value(_Key, Values) ->
+    lists:reverse(Values).
+
+%%%_* Private ----------------------------------------------------------------
+implementation_for(Collection) ->
+    neo_reflect:implementation_for(Collection, [?MODULE]).
+
+%%%_* Tests ==================================================================
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+group_test() ->
+    ?assertEqual(
+        #{
+            0 => [array],
+            a => [dict, map],
+            b => [gb_trees, dict],
+            c => [map],
+            <<"d">> => []
+        },
+        group(#{
+            a => array:from_list([array]),
+            b => dict:from_list([{a, dict}, {b, dict}]),
+            0 => gb_trees:from_orddict([{b, gb_trees}]),
+            <<"d">> => #{a => map, c => map}
+        })
+    ).
+
+-endif.

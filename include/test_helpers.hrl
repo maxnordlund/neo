@@ -1,6 +1,8 @@
 -ifndef(NEO_TEST_HELPERS).
 -define(NEO_TEST_HELPERS, true).
 
+-include("assertions.hrl").
+
 -define(function_test(Call, Arguments, Examples), [
     case Tuple of
         {Arguments, Expected} ->
