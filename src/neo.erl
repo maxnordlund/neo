@@ -987,9 +987,11 @@ key_sorter(Maps, Key, SorterFun) ->
                 Map;
             Unknown ->
                 erlang:error(
-                    neo_test_helpers:format(
-                        "expected neo:key_to_value_map_tuple_list to return 2-tuples only, instead got ~W",
-                        [Unknown, 10]
+                    unicode:characters_to_list(
+                        io_lib:format(
+                            "expected neo:key_to_value_map_tuple_list to return 2-tuples only, instead got ~W",
+                            [Unknown, 10]
+                        )
                     ),
                     [Maps, Key, SorterFun]
                 )
@@ -1020,7 +1022,7 @@ zip([A | As], [B | Bs]) -> [{A, B} | zip(As, Bs)].
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").
--include("neo_test_helpers.hrl").
+-include("test_helpers.hrl").
 
 -define(EON_MAP_EXAMPLES,
     [null] => null,
@@ -1381,7 +1383,7 @@ fold_test_() ->
     ).
 
 -define(mapfold_test(Collection, Init, Fun, Expected),
-    {neo_test_helpers:format("mapfold(~p, ~p, ~s)", [Collection, Init, ??Fun]), fun() ->
+    {neo_test_helpers:flat_format("mapfold(~p, ~p, ~s)", [Collection, Init, ??Fun]), fun() ->
         ?assertEqual(Expected, mapfold(Collection, Init, Fun))
     end}
 ).
