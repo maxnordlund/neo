@@ -51,6 +51,50 @@ implementation_for(Map, Behaviours) when is_map(Map) andalso is_list(Behaviours)
     neo_maps;
 implementation_for(List, Behaviours) when is_list(List) andalso is_list(Behaviours) ->
     neo_lists;
+implementation_for({Size, Nodes}, Behaviours) when
+    is_integer(Size) andalso (Nodes =:= nil orelse tuple_size(Nodes) =:= 4) andalso
+        is_list(Behaviours)
+->
+    neo_gb_trees;
+implementation_for(Dict, Behaviours) when
+    is_record(Dict, dict, 9) andalso is_list(Behaviours)
+->
+    neo_dict;
+implementation_for(Array, Behaviours) when
+    is_record(Array, array, 5) andalso is_list(Behaviours)
+->
+    neo_array;
+implementation_for(Record, Behaviours) when
+    is_atom(element(1, Record)) andalso is_list(Behaviours)
+->
+    Module = element(1, Record),
+    case code:which(Module) of
+        non_existing ->
+            neo_tuples;
+        _ ->
+            case is_any_behaviour_implemented(Module, Behaviours) of
+                true ->
+                    Module;
+                false ->
+                    %% TODO: If/when I add `neo_eon' backwards compatibility module,
+                    %% I should add a check for it here and return `neo_eon'.
+                    %% That module will, in turn, do it's own lookup etc.
+
+                    %% Fall back to `neo_tuples' if the module doesn't implement
+                    %% any of the given behaviours.
+                    %%
+                    %% PropEr generated a tuple with `binary' as the first
+                    %% element, which is a module from OTP but does not
+                    %% implement `neo_collection'. Rather then crash, we
+                    %% should just accept reality and fall back to the generic
+                    %% tuple implementation.
+                    neo_tuples
+            end
+    end;
+implementation_for(Tuple, Behaviours) when
+    is_tuple(Tuple) andalso is_list(Behaviours)
+->
+    neo_tuples;
 implementation_for(Term, Behaviours) when is_list(Behaviours) ->
     error(badarg, [Term, Behaviours]).
 
@@ -131,7 +175,16 @@ implementation_for_test_() ->
         ),
         "Elixir struct" => ?_assertEqual(
             neo_maps, implementation_for(#{'__struct__' => neo_maps}, [neo_collection])
-        )
+        ),
+        "records" => #{
+            "with implementation" => ?_assertEqual(
+                neo_persistent_term,
+                implementation_for(neo_persistent_term:new(), [neo_collection])
+            ),
+            "missing implementation falls back to neo_tuples" => ?_assertEqual(
+                neo_tuples, implementation_for({binary}, [neo_collection])
+            )
+        }
     }).
 
 get_behaviours_test_() ->
