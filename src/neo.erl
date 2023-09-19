@@ -1389,7 +1389,7 @@ fold_test_() ->
 ).
 mapfold_test_() ->
     Map = #{a => 1, b => 2, c => 3},
-    Object = maps:to_list(Map),
+    Object = lists:sort(maps:to_list(Map)),
     List = [1, 2, 3],
     [
         ?mapfold_test(List, 0, fun mapfold_sum/2, {[2, 4, 6], 6}),
