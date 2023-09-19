@@ -33,7 +33,9 @@ add_dependencies_to_code_path() ->
 
 build_root() ->
     RepoRoot = filename:dirname(
-        filename:dirname(filename:absname(escript:script_name()))
+        filename:dirname(
+            filename:dirname(filename:absname(escript:script_name()))
+        )
     ),
     case
         re:run(RepoRoot, "^(.+)/_build/[^/]+/lib/neo$", [{capture, all_but_first, list}])
@@ -117,8 +119,8 @@ ordered_unique_includes([Head | Tail]) ->
         lists:foldl(
             fun(Include, Includes) ->
                 case lists:member(Include, Includes) of
-                    true -> [Include | Includes];
-                    false -> Includes
+                    true -> Includes;
+                    false -> [Include | Includes]
                 end
             end,
             lists:reverse(Head),
