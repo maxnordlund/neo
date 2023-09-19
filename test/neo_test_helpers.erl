@@ -5,6 +5,8 @@
 -export([
     flat_format/2,
     format_call/2,
+    format/1,
+    format/2,
     proper_options/1,
     test_case/1
 ]).
@@ -192,6 +194,18 @@ proper_options(Options0) ->
 flat_format(FormatString, Arguments) ->
     lists:flatten(io_lib:format(lists:flatten(FormatString), Arguments)).
 
+%% @equiv format(Term, #{})
+format(Term) ->
+    format(Term, #{}).
+
+%% @doc Returns a string representing the given term.
+%%
+%% This is like `io_lib:write/1', except it also syntax highlight using ANSI
+%% colors. It also supports the records used by the tests.
+-spec format(term(), formatting_options()) -> unicode:chardata().
+format(Term, Options) ->
+    format(Term, Options, maps:get(indent_level, Options, 1)).
+
 %%%_* Private ----------------------------------------------------------------
 
 %% Used by the `?function_test/3' macro.
@@ -203,6 +217,236 @@ format_call(Call, Arguments) ->
         ")"
     ],
     flat_format(FormatString, [Fun | Arguments]).
+
+%% @private
+format(Atom, Options, _IndentLevel) when is_atom(Atom) ->
+    io_lib:format("~s~tp~s", [?ATOM_NUMBER_COLOR(Options), Atom, ?RESET(Options)]);
+format(Number, Options, _IndentLevel) when is_number(Number) ->
+    io_lib:format("~s~tp~s", [?ATOM_NUMBER_COLOR(Options), Number, ?RESET(Options)]);
+format(Array, Options, IndentLevel) when is_record(Array, array, 5) ->
+    Default = array:default(Array),
+    io_lib:format("~sarray~s:~sfrom_list~s([\n~s~ts\n~s])", [
+        ?MODULE_RECORD_TAG_COLOR(Options),
+        ?RESET(Options),
+        ?RECORD_FIELD_COLOR(Options),
+        ?RESET(Options),
+        indent(IndentLevel),
+        lists:join(<<", ">>, [
+            format_array_element(Element, Default, Options, IndentLevel)
+         || Element <- array:to_list(Array)
+        ]),
+        indent(IndentLevel - 1)
+    ]);
+format(Dict, Options, IndentLevel) when is_record(Dict, dict, 9) ->
+    io_lib:format("~sdict~s:~sfrom_list~s([\n~ts\n~s])", [
+        ?MODULE_RECORD_TAG_COLOR(Options),
+        ?RESET(Options),
+        ?RECORD_FIELD_COLOR(Options),
+        ?RESET(Options),
+        format_orddict_elements(dict:to_list(Dict), Options, IndentLevel),
+        indent(IndentLevel - 1)
+    ]);
+format({Size, Nodes} = Tree, Options, IndentLevel) when
+    is_integer(Size) andalso (Nodes =:= nil orelse tuple_size(Nodes) =:= 4)
+->
+    io_lib:format("~sgb_tree~s:~sfrom_orddict~s([\n~ts\n~s])", [
+        ?MODULE_RECORD_TAG_COLOR(Options),
+        ?RESET(Options),
+        ?RECORD_FIELD_COLOR(Options),
+        ?RESET(Options),
+        format_orddict_elements(gb_sets:to_list(Tree), Options, IndentLevel),
+        indent(IndentLevel - 1)
+    ]);
+format(Record, #{records := Records} = Options, IndentLevel) when
+    is_atom(element(1, Record))
+->
+    Indent = indent(IndentLevel),
+    Tag = element(1, Record),
+    Size = tuple_size(Record),
+    case Records of
+        #{{Tag, Size} := []} ->
+            io_lib:format("#~s~tp~s{}", [
+                ?MODULE_RECORD_TAG_COLOR(Options), Tag, ?RESET(Options)
+            ]);
+        #{{Tag, Size} := Fields} ->
+            io_lib:format("#~s~tp~s{\n~ts\n~s}", [
+                ?MODULE_RECORD_TAG_COLOR(Options),
+                Tag,
+                ?RESET(Options),
+                lists:join(<<",\n">>, [
+                    io_lib:format("~s~s~tp~s = ~ts", [
+                        Indent,
+                        ?RECORD_FIELD_COLOR(Options),
+                        Key,
+                        ?RESET(Options),
+                        format(Value, Options, IndentLevel + 1)
+                    ])
+                 || {Key, Value} <- lists:zip(Fields, tl(tuple_to_list(Record)))
+                ]),
+                indent(IndentLevel - 1)
+            ]);
+        _ ->
+            format_tuple(Record, Options, IndentLevel)
+    end;
+format(List, Options, IndentLevel) when is_list(List) ->
+    format_list(List, list_type(List), Options, IndentLevel);
+format(Map, Options, IndentLevel) when is_map(Map) ->
+    Indent = indent(IndentLevel),
+    [
+        <<"#{\n">>,
+        lists:join(<<",\n">>, [
+            io_lib:format("~s~ts => ~ts", [
+                Indent,
+                format(Key, Options, IndentLevel + 1),
+                format(Value, Options, IndentLevel + 1)
+            ])
+         || {Key, Value} <- maps:to_list(Map)
+        ]),
+        $\n,
+        indent(IndentLevel - 1),
+        <<"}">>
+    ];
+format(Tuple, Options, IndentLevel) when is_tuple(Tuple) ->
+    format_tuple(Tuple, Options, IndentLevel);
+format(Fun, Options, _IndentLevel) when is_function(Fun) ->
+    Info = erlang:fun_info(Fun),
+    flat_format("~sfun~s ~s~tp~s:~s~tp~s/~s~p~s", [
+        ?KEYWORD_COLOR(Options),
+        ?RESET(Options),
+        ?MODULE_RECORD_TAG_COLOR(Options),
+        proplists:get_value(module, Info),
+        ?RESET(Options),
+        ?RECORD_FIELD_COLOR(Options),
+        proplists:get_value(name, Info),
+        ?RESET(Options),
+        ?ATOM_NUMBER_COLOR(Options),
+        proplists:get_value(arity, Info),
+        ?RESET(Options)
+    ]);
+format(Ref, _Options, _IndentLevel) when is_reference(Ref) ->
+    case erlang:get('neo_stream:set/3 sentinel') of
+        Ref -> "_";
+        _ -> io_lib:format("~tp", [Ref])
+    end;
+format(Term, _Options, _IndentLevel) ->
+    io_lib:format("~tp", [Term]).
+
+format_list([], _ListType, _Options, _IndentLevel) ->
+    <<"[]">>;
+format_list(String, charlist, _Options, _IndentLevel) when is_list(String) ->
+    io_lib:format("~tp", [unicode:characters_to_list(String)]);
+format_list([Element], _ListType, Options, IndentLevel) ->
+    [$[, format(Element, Options, IndentLevel + 1), $]];
+format_list(List, ListType, Options, IndentLevel) when is_list(List) ->
+    [
+        <<"[\n">>,
+        format_list_elements(List, ListType, Options, IndentLevel),
+        $\n,
+        indent(IndentLevel - 1),
+        <<"]">>
+    ].
+
+-spec format_list_elements(
+    maybe_improper_list(), ListType, formatting_options(), non_neg_integer()
+) ->
+    unicode:chardata()
+when
+    ListType :: orddict | proplist | plain.
+format_list_elements(List, orddict, Options, IndentLevel) when is_list(List) ->
+    format_orddict_elements(List, Options, IndentLevel);
+format_list_elements(List, _, Options, IndentLevel) when is_list(List) ->
+    Indent = indent(IndentLevel),
+    {Init, Tail} = split(List),
+    [
+        lists:join(<<",\n">>, [
+            [Indent, format(Element, Options, IndentLevel + 1)]
+         || Element <- Init
+        ]),
+        case Tail of
+            [] ->
+                %% Proper list
+                <<>>;
+            ImproperTail when not is_list(ImproperTail) ->
+                %% Proper list with improper tail
+                io_lib:format("\n~s| ~ts", [
+                    Indent,
+                    format(Tail, Options, IndentLevel + 1)
+                ])
+        end
+    ].
+
+list_type(List) ->
+    case io_lib:deep_char_list(List) of
+        true ->
+            charlist;
+        false ->
+            neo_lists:typeof(List)
+    end.
+
+split([]) ->
+    {[], []};
+split(List) ->
+    split([], List).
+
+split(Init, ImproperTail) when not is_list(ImproperTail) ->
+    {lists:reverse(Init), ImproperTail};
+split(Init, [Tail]) ->
+    {lists:reverse(Init, [Tail]), []};
+split(Init, [Head | Tail]) ->
+    split([Head | Init], Tail).
+
+format_orddict_elements([], _Options, _IndentLevel) ->
+    <<>>;
+format_orddict_elements(List, Options, IndentLevel) when is_list(List) ->
+    Indent = indent(IndentLevel),
+    [
+        lists:join(<<",\n">>, [
+            case Element of
+                {Key, Term} ->
+                    io_lib:format("~s{~ts, ~ts}", [
+                        Indent,
+                        format(Key, Options, IndentLevel + 1),
+                        format(Term, Options, IndentLevel + 1)
+                    ]);
+                _ ->
+                    format(Element, Options, IndentLevel + 1)
+            end
+         || Element <- List
+        ])
+    ].
+
+format_tuple({}, _Options, _IndentLevel) ->
+    <<"{}">>;
+format_tuple(Tuple, Options, IndentLevel) when tuple_size(Tuple) < 3 ->
+    [
+        ${,
+        lists:join(<<", ">>, [
+            format(Element, Options, IndentLevel + 1)
+         || Element <- tuple_to_list(Tuple)
+        ]),
+        $}
+    ];
+format_tuple(Tuple, Options, IndentLevel) when is_tuple(Tuple) ->
+    Indent = indent(IndentLevel),
+    [
+        <<"{\n">>,
+        Indent,
+        lists:join([<<",\n">>, Indent], [
+            format(Element, Options, IndentLevel + 1)
+         || Element <- tuple_to_list(Tuple)
+        ]),
+        $\n,
+        indent(IndentLevel - 1),
+        <<"}">>
+    ].
+
+format_array_element(Default, Default, Options, _IndentLevel) ->
+    [?COMMENT_COLOR(Options), $_, ?RESET(Options)];
+format_array_element(Element, _Default, Options, IndentLevel) ->
+    [$\n, indent(IndentLevel), format(Element, Options, IndentLevel + 1)].
+
+indent(IndentLevel) ->
+    lists:duplicate(IndentLevel * 4, $\s).
 
 %% @private
 environmental_options() ->

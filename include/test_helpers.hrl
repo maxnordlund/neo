@@ -3,6 +3,68 @@
 
 -include("assertions.hrl").
 
+%% Dim red
+-define(ATOM_NUMBER_COLOR(Options),
+    (case maps:get(color, Options, true) of
+        true -> "\e[2;31m";
+        false -> ""
+    end)
+).
+%% Dim yellow/orange
+-define(NUMBER_COLOR(Options),
+    (case maps:get(color, Options, true) of
+        true -> "\e[2;33m";
+        false -> ""
+    end)
+).
+%% Yellow
+-define(MODULE_RECORD_TAG_COLOR(Options),
+    (case maps:get(color, Options, true) of
+        true -> "\e[33m";
+        false -> ""
+    end)
+).
+%% Blue
+-define(RECORD_FIELD_COLOR(Options),
+    (case maps:get(color, Options, true) of
+        true -> "\e[34m";
+        false -> ""
+    end)
+).
+%% Bold/bright magenta
+-define(KEYWORD_COLOR(Options),
+    (case maps:get(color, Options, true) of
+        true -> "\e[1;35m";
+        false -> ""
+    end)
+).
+%% Green
+-define(STRING_COLOR(Options),
+    (case maps:get(color, Options, true) of
+        true -> "\e[32m";
+        false -> ""
+    end)
+).
+%% Cyan
+-define(OPERATOR_COLOR(Options),
+    (case maps:get(color, Options, true) of
+        true -> "\e[36m";
+        false -> ""
+    end)
+).
+-define(COMMENT_COLOR(Options),
+    (case maps:get(color, Options, true) of
+        true -> "\e[2;0m";
+        false -> ""
+    end)
+).
+-define(RESET(Options),
+    (case maps:get(color, Options, true) of
+        true -> "\e[0m";
+        false -> ""
+    end)
+).
+
 -define(function_test(Call, Arguments, Examples), [
     case Tuple of
         {Arguments, Expected} ->

@@ -10,7 +10,7 @@
 
 -define(var(Expr), begin
     (fun(X__Term) ->
-        io:format("~ts = ~ts\n", [??Expr, X__Term]),
+        io:format("~ts = ~tp\n", [??Expr, X__Term]),
         X__Term
     end)(
         Expr

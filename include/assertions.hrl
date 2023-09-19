@@ -103,6 +103,41 @@ end).
 end).
 -endif.
 
+%% Asserts that the given container is equal to the expected container.
+%%
+%% This is similar to `?assertEqual/2', but it uses the expected container's
+%% `equals' function for comparison, instead of a plain match (`==').
+-ifdef(NOASSERT).
+-define(assertContainerEqual(Container, Expected, Actual), ok).
+-else.
+-define(assertContainerEqual(Container, Expected, Actual), begin
+    ((fun(#container{equals = X__Equals}, X__Expected, X__Actual) ->
+        case X__Equals(X__Expected, X__Actual) of
+            true ->
+                ok;
+            false ->
+                erlang:error(
+                    {assertEqual, [
+                        {module, ?MODULE},
+                        {line, ?LINE},
+                        {expression,
+                            %% Rebar formats the error message like this:
+                            %% ?assertEqual(<expected>, <expression>)
+                            neo_test_helpers:flat_format("~s)\e[0m using ~s", [
+                                ??Actual,
+                                neo_test_helpers:format(X__Equals, #{color => false})
+                            ])},
+                        {expected, X__Expected},
+                        {value, X__Actual}
+                    ]}
+                )
+        end
+    end)(
+        Container, Expected, Actual
+    ))
+end).
+-endif.
+
 -ifdef(NOASSERT).
 -define(assertNotException(Expr), ok).
 -else.
