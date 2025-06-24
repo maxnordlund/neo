@@ -1,0 +1,17 @@
+EunitTests0 = proplists:get_value(eunit_tests, CONFIG, []).
+
+case proplists:get_value(inparallel, EunitTests0) of
+    {application, neo} ->
+        %% The wildcard is really a hack since this is script may be evaluated
+        %% before the app file is generated.
+        Inorder = proplists:append_values(inorder, EunitTests0),
+        Inparallel0 = [
+            list_to_atom(filename:basename(ErlFile, ".erl"))
+         || ErlFile <- filelib:wildcard("{src,test}/**/*.erl")
+        ],
+        Inparallel1 = Inparallel0 -- Inorder,
+        EunitTests1 = lists:keystore(inparallel, 1, EunitTests0, {inparallel, Inparallel1}),
+        lists:keystore(eunit_tests, 1, CONFIG, {eunit_tests, EunitTests1});
+    _ ->
+        CONFIG
+end.
