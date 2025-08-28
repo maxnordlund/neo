@@ -22,6 +22,7 @@
 -export([
     fold/3,
     map/2,
+    mapfold/3,
     filter/2,
     filtermap/2
 ]).
@@ -170,24 +171,41 @@ map(Collection, Mapper) when is_function(Mapper, 2) ->
     neo_stream:fold(
         neo_stream:from(Collection),
         neo_collection:new(Collection),
-        fun(Accumulator, KeyIn, ValueIn) ->
+        fun(CollectionOut, KeyIn, ValueIn) ->
             case neo_reflect:has_implementation(ValueIn, [neo_stream]) of
                 true ->
                     ValueOut = map(ValueIn, Mapper),
-                    neo_collection:set(Accumulator, KeyIn, ValueOut);
+                    neo_collection:set(CollectionOut, KeyIn, ValueOut);
                 false ->
                     {KeyOut, ValueOut} = Mapper(KeyIn, ValueIn),
-                    neo_collection:set(Accumulator, KeyOut, ValueOut)
+                    neo_collection:set(CollectionOut, KeyOut, ValueOut)
             end
         end
     );
 map(Collection, Mapper) when is_function(Mapper, 1) ->
     neo_iterable:map(Collection, fun(_Key, Value) ->
-        case neo_reflect:has_implementation(Value, [neo_stream]) of
+        case neo_reflect:has_implementation(Value, [neo_iterable]) of
             true ->
                 map(Value, Mapper);
             false ->
                 Mapper(Value)
+        end
+    end).
+
+%% @doc Combines the operations of `map/2' and `fold/3' into one pass.
+%%
+%% @see lists:mapfoldl/3
+mapfold(Collection, MapFolder, InitialAccumulator) when
+    is_function(MapFolder, 2) orelse is_function(MapFolder, 3)
+->
+    neo_iterable:mapfold(Collection, InitialAccumulator, fun(Key, Value, Accumulator) ->
+        case neo_reflect:has_implementation(Value, [neo_iterable]) of
+            true ->
+                mapfold(Value, MapFolder, Accumulator);
+            false when is_function(MapFolder, 2) ->
+                MapFolder(Value, Accumulator);
+            false when is_function(MapFolder, 3) ->
+                MapFolder(Key, Value, Accumulator)
         end
     end).
 
@@ -201,7 +219,7 @@ filter(Collection, Filterer) when ?is_callback(Filterer) ->
     filtermap(Collection, Filterer).
 
 %% @doc Returns a new collection that satisfies the given predicate, recursively,
-%% optionally transforming the elemtent in question.
+%% optionally transforming the element in question.
 -spec filtermap(
     neo_collection:t(Key, Value),
     neo_iterable:filter_mapper(Key, Value, NewValue)
@@ -209,7 +227,7 @@ filter(Collection, Filterer) when ?is_callback(Filterer) ->
     NewValue :: any().
 filtermap(Collection, FilterMapper) when ?is_callback(FilterMapper) ->
     neo_iterable:filtermap(Collection, fun(KeyIn, ValueIn) ->
-        case neo_reflect:has_implementation(ValueIn, [neo_stream]) of
+        case neo_reflect:has_implementation(ValueIn, [neo_iterable]) of
             true ->
                 {true, filtermap(ValueIn, FilterMapper)};
             false ->
@@ -535,7 +553,7 @@ filter_test_() ->
      || Filter <- [
             fun is_atom/1,
             fun(_Key, Value) ->
-                is_atom(Value)
+                not is_binary(Value)
             end
         ]
     ].

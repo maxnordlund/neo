@@ -30,7 +30,10 @@
     set/3,
     size/1,
     to/2,
-    values/1
+    to/3,
+    values/1,
+    with/2,
+    without/2
 ]).
 
 %%%_* Types ------------------------------------------------------------------
@@ -223,7 +226,13 @@ to(Collection, Type, Mapper) ->
     Iterator1 = neo_stream:map(Iterator0, Mapper),
     if
         is_list(InitialAccumulator) ->
-            neo_stream:fold(Iterator1, InitialAccumulator, fun list_set/3);
+            List = neo_stream:fold(Iterator1, InitialAccumulator, fun list_set/3),
+            case is_list(Type) andalso neo_lists:typeof(Type) of
+                proplist ->
+                    proplists:compact(List);
+                _ ->
+                    List
+            end;
         true ->
             neo_stream:fold(Iterator1, InitialAccumulator, fun set/3)
     end.
@@ -385,6 +394,17 @@ merge_with(CollectionA, CollectionB, Combiner) when is_function(Combiner, 3) ->
                 end,
                 Keys
             )
+    end.
+
+with(Collection, Keys) ->
+    to(Keys, Collection, fun(Key) ->
+        get(Collection, Key)
+    end).
+
+without(Collection, Key) ->
+    case neo_collection:has(Collection, Key) of
+        true -> neo_collection:delete(Collection, Key);
+        false -> Collection
     end.
 
 %%%_ * Callbacks -------------------------------------------------------------

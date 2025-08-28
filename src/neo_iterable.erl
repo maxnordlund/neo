@@ -26,7 +26,8 @@
     fold/3,
     foreach/2,
     group/1,
-    map/2
+    map/2,
+    mapfold/3
 ]).
 
 %%%_* Types ------------------------------------------------------------------
@@ -181,9 +182,44 @@ map(Collection, Mapper) when ?is_callback(Mapper) ->
             Module:map(Collection, Mapper);
         false ->
             fold(Collection, neo_collection:new(Collection), fun(
-                Accumulator, Key, Value
+                CollectionOut, Key, Value
             ) ->
-                neo_collection:set(Accumulator, Key, ?call_callback(Mapper, Key, Value))
+                neo_collection:set(
+                    CollectionOut, Key, ?call_callback(Mapper, Key, Value)
+                )
+            end)
+    end.
+
+mapfold(Collection, InitialAccumulator, MapFolder) when
+    is_function(MapFolder, 2) orelse is_function(MapFolder, 3)
+->
+    Module = implementation_for(Collection),
+    case neo_reflect:is_exported(Module, mapfold, 3) of
+        true ->
+            Module:mapfold(Collection, MapFolder, InitialAccumulator);
+        false ->
+            fold(Collection, InitialAccumulator, fun(
+                {CollectionOut, AccumulatorIn}, KeyIn, ValueIn
+            ) ->
+                Result =
+                    if
+                        is_function(MapFolder, 2) ->
+                            MapFolder(ValueIn, AccumulatorIn);
+                        is_function(MapFolder, 3) ->
+                            MapFolder(KeyIn, ValueIn, AccumulatorIn)
+                    end,
+                case Result of
+                    {ValueOut, AccumulatorOut} ->
+                        {
+                            neo_collection:set(CollectionOut, KeyIn, ValueOut),
+                            AccumulatorOut
+                        };
+                    {KeyOut, ValueOut, AccumulatorOut} ->
+                        {
+                            neo_collection:set(CollectionOut, KeyOut, ValueOut),
+                            AccumulatorOut
+                        }
+                end
             end)
     end.
 
@@ -197,13 +233,13 @@ filter(Collection, Filter) when ?is_callback(Filter) ->
             Module:filter(Collection, Filter);
         false ->
             fold(Collection, neo_collection:new(Collection), fun(
-                Accumulator, Key, Value
+                CollectionOut, Key, Value
             ) ->
                 case ?call_callback(Filter, Key, Value) of
                     true ->
-                        neo_collection:set(Accumulator, Key, Value);
+                        neo_collection:set(CollectionOut, Key, Value);
                     false ->
-                        Accumulator
+                        CollectionOut
                 end
             end)
     end.
@@ -227,15 +263,15 @@ filtermap(Collection, FilterMapper) when ?is_callback(FilterMapper) ->
             Module:filtermap(Collection, FilterMapper);
         false ->
             fold(Collection, neo_collection:new(Collection), fun(
-                Accumulator, Key, Value
+                CollectionOut, Key, Value
             ) ->
                 case ?call_callback(FilterMapper, Key, Value) of
                     true ->
-                        neo_collection:set(Accumulator, Key, Value);
+                        neo_collection:set(CollectionOut, Key, Value);
                     {true, ValueOut} ->
-                        neo_collection:set(Accumulator, Key, ValueOut);
+                        neo_collection:set(CollectionOut, Key, ValueOut);
                     false ->
-                        Accumulator
+                        CollectionOut
                 end
             end)
     end.
