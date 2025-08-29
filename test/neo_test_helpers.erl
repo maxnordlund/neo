@@ -8,7 +8,8 @@
     format/1,
     format/2,
     proper_options/1,
-    test_case/1
+    test_case/1,
+    trace/3
 ]).
 
 %%%_* Types ------------------------------------------------------------------
@@ -205,6 +206,11 @@ format(Term) ->
 -spec format(term(), formatting_options()) -> unicode:chardata().
 format(Term, Options) ->
     format(Term, Options, maps:get(indent_level, Options, 1)).
+
+trace(Module, Function, Arity) ->
+    dbg:tracer(),
+    dbg:tpl({Module, Function, Arity}, cx),
+    dbg:p(self(), [call, return_to]).
 
 %%%_* Private ----------------------------------------------------------------
 

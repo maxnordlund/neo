@@ -25,7 +25,7 @@
     filtermap/2,
     fold/3,
     foreach/2,
-    group/1,
+    group_by/2,
     map/2,
     mapfold/3
 ]).
@@ -86,18 +86,20 @@
 %%
 %% Used to implement {@link next/1}.
 
--type mapper(Key, ValueIn, ValueOut) :: fun((Key, ValueIn) -> ValueOut).
+-type mapper(Key, ValueIn, ValueOut) ::
+    fun((Key, ValueIn) -> ValueOut) | fun((ValueIn) -> ValueOut).
 %% A mapping function, just like the first parameter of {@link maps:map/2}.
 
--type filter(Key, Value) :: fun((Key, Value) -> boolean()).
+-type filter(Key, Value) :: fun((Key, Value) -> boolean()) | fun((Value) -> boolean()).
 %% A filter function, just like the first parameter of {@link maps:filter/2}.
 
 -type filter_mapper(Key, ValueIn, ValueOut) ::
-    fun((Key, ValueIn) -> boolean() | {true, ValueIn | ValueOut}).
+    fun((Key, ValueIn) -> boolean() | {true, ValueIn | ValueOut})
+    | fun((ValueIn) -> boolean() | {true, ValueIn | ValueOut}).
 %% A filter and mapping function, just like the first parameter of
 %% {@link maps:filtermap/2}.
 
--type foreach_fun(Key, Value) :: fun((Key, Value) -> any()).
+-type foreach_fun(Key, Value) :: fun((Key, Value) -> any()) | fun((Value) -> any()).
 %% A `fun' just like the first parameter of {@link maps:foreach/2}.
 
 -type folder(Accumulator, Key, Value) ::
@@ -298,28 +300,25 @@ foreach(Collection, Fun) when ?is_callback(Fun) ->
             end)
     end.
 
--spec group(Collection) -> neo_collection:t(Key, list(Value)) when
-    Collection :: neo_collection:t(Key, neo_collection:t(Key, Value)).
-group(Collection) ->
-    map(
-        fold(Collection, neo_collection:new(Collection), fun group_internal/3),
-        fun reverse_list_value/2
-    ).
+group_by(Collection, Grouper) when ?is_callback(Grouper) ->
+    Module = implementation_for(Collection),
+    case neo_reflect:is_exported(Module, group_by, 2) of
+        true ->
+            Module:group_by(Collection, Grouper);
+        false ->
+            {Groups, _} = fold(Collection, {#{}, Grouper}, fun group_by_internal/3),
+            Groups
+    end.
 
-%% @private
-group_internal(Groups0, Key, InnerCollection) ->
-    Values0 = neo_collection:get(Groups0, Key, []),
-    Groups1 = neo_collection:set(Groups0, Key, Values0),
-    fold(InnerCollection, Groups1, fun group_internal_inner/3).
-
-%% @private
-group_internal_inner(Groups, Key, Value) ->
-    Values0 = neo_collection:get(Groups, Key, []),
-    neo_collection:set(Groups, Key, [Value | Values0]).
-
-%% @private
-reverse_list_value(_Key, Values) ->
-    lists:reverse(Values).
+group_by_internal({Groups0, Mapper}, Key, Value) ->
+    Group = ?call_callback(Mapper, Key, Value),
+    Groups1 = maps:update_with(
+        Group,
+        fun(Values) -> [{Key, Value} | Values] end,
+        [{Key, Value}],
+        Groups0
+    ),
+    {Groups1, Mapper}.
 
 %%%_* Private ----------------------------------------------------------------
 implementation_for(Collection) ->
@@ -328,22 +327,26 @@ implementation_for(Collection) ->
 %%%_* Tests ==================================================================
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("neo/include/test_helpers.hrl").
 
-group_test() ->
-    ?assertEqual(
+group_by_test_() ->
+    ?function_test(
+        group_by(Collection, Mapper),
+        [Collection, Mapper],
         #{
-            0 => [array],
-            a => [dict, map],
-            b => [gb_trees, dict],
-            c => [map],
-            <<"d">> => []
-        },
-        group(#{
-            a => array:from_list([array]),
-            b => dict:from_list([{a, dict}, {b, dict}]),
-            0 => gb_trees:from_orddict([{b, gb_trees}]),
-            <<"d">> => #{a => map, c => map}
-        })
+            [#{a => map, c => map}, fun value/2] => #{map => [{a, map}, {c, map}]},
+            [array:from_list([a, b, a]), fun value/2] => #{
+                a => [{2, a}, {0, a}], b => [{1, b}]
+            },
+            [dict:from_list([{a, dict}, {b, dict}]), fun value/2] => #{
+                dict => [{a, dict}, {b, dict}]
+            },
+            [gb_trees:from_orddict([{a, gb_trees}, {b, gb_trees}]), fun value/2] => #{
+                gb_trees => [{b, gb_trees}, {a, gb_trees}]
+            }
+        }
     ).
+
+value(_Key, Value) -> Value.
 
 -endif.

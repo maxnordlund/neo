@@ -69,7 +69,7 @@
 ]).
 
 %%%_* Includes ================================================================
--include_lib("stdlib/include/assert.hrl").
+-include("internal.hrl").
 
 %%%_ * Types ==================================================================
 
@@ -454,28 +454,43 @@ pop(Collection, Lookup) ->
     Value = get_(Collection, Lookup),
     {Value, delete(Collection, Lookup)}.
 
-%% @doc Returns a map of lists where the keys are the set of values
-%% associated with `Key' in each of the maps in `Maps'.
+%% @doc Returns an {@link neo_collection:t() collection} where the keys are the
+%% set of values returned by the given `Mapper'.
 %%
-%% This means each key may have one or more maps associated with it.
--spec group_by([Map], Key) -> #{Value => [Map]} when Map :: #{Key => Value}.
-group_by(Maps, Fun) when is_function(Fun, 1) ->
-    ?assertEqual([], [Term || Term <- Maps, not is_map(Term)]),
-    lists:foldl(
-        fun(Map, Groups) ->
-            case Fun(Map) of
-                {ok, Value} ->
-                    Group = maps:get(Value, Groups, []),
-                    Groups#{Value => [Map | Group]};
-                {error, notfound} ->
-                    Groups
-            end
-        end,
-        #{},
-        Maps
+%% As a convenience, if the `Mapper' is not a function, then the collection is
+%% assumed to be a collection of collections and the `Mapper' the key to fetch
+%% in each of those sub collection.
+-spec group_by
+    (CollectionOfCollections, Key) -> CollectionOut when
+        CollectionOfCollections :: neo_collection:t(Key, CollectionInner),
+        CollectionInner :: neo_collection:t(_, Value),
+        CollectionOut :: neo_collection:t(Key, [Value]);
+    (CollectionOfCollections, Fetcher) -> CollectionOut when
+        CollectionOfCollections :: neo_collection:t(Key, CollectionInner),
+        CollectionInner :: neo_collection:t(_, ValueIn),
+        CollectionOut :: neo_collection:t(Key, [ValueOut]),
+        Fetcher :: fun((ValueIn) -> ValueOut).
+group_by(CollectionOfCollections, Fun) when is_function(Fun, 1) ->
+    maps:map(
+        fun(_Key, Value) -> Value end,
+        neo_iterable:group_by(CollectionOfCollections, Fun)
     );
-group_by(Maps, Key) ->
-    group_by(Maps, fun(Map) -> get(Map, Key) end).
+group_by(CollectionOfCollections, Key) ->
+    Sentinel = make_ref(),
+    VarName = neo_iterable:group_by(CollectionOfCollections, fun(Collection) ->
+        get(Collection, Key, Sentinel)
+    end),
+    Return =
+        maps:filtermap(
+            fun
+                (Group, _Value) when Group =:= Sentinel -> false;
+                (_Key, Value) -> {true, Value}
+            end,
+            ?var(
+                VarName
+            )
+        ),
+    ?var(Return).
 
 %% @doc Returns a map of maps where the keys are the set of values
 %% associated with `Key' in each of the maps in `Maps'.
@@ -885,68 +900,66 @@ get_failure_test_() ->
     ].
 
 group_by_test_() ->
-    ById = fun(#{id := Id}) -> {ok, Id} end,
-    [?_assertError({assertEqual, _}, group_by([1, a, "c"], key))] ++
-        ?function_test(
-            group_by(Maps, Key),
-            [Maps, Key],
-            #{
-                [[], key] =>
-                    #{},
-                [[#{other => value}, #{key => abc}], key] =>
-                    #{
-                        abc => [#{key => abc}]
-                    },
-                [[#{key => 123, other => value}, #{key => abc}], key] =>
-                    #{
-                        123 => [#{key => 123, other => value}],
-                        abc => [#{key => abc}]
-                    },
-                [[#{key => 123, other => value}, #{key => 123, foo => bar}], key] =>
-                    #{
-                        123 => [
-                            #{key => 123, foo => bar},
-                            #{key => 123, other => value}
-                        ]
-                    },
-                [[#{id => 123, name => "Jane"}, #{id => 123, name => "John"}], ById] =>
-                    #{
-                        123 => [
-                            #{id => 123, name => "John"},
-                            #{id => 123, name => "Jane"}
-                        ]
-                    }
-            }
-        ).
+    ById = fun(#{id := Id}) -> Id end,
+    ?function_test(
+        group_by(Maps, Key),
+        [Maps, Key],
+        #{
+            [[], key] =>
+                #{},
+            [[#{other => value}, #{key => abc}], key] =>
+                #{
+                    abc => [#{key => abc}]
+                },
+            [[#{key => 123, other => value}, #{key => abc}], key] =>
+                #{
+                    123 => [#{key => 123, other => value}],
+                    abc => [#{key => abc}]
+                },
+            [[#{key => 123, other => value}, #{key => 123, foo => bar}], key] =>
+                #{
+                    123 => [
+                        #{key => 123, foo => bar},
+                        #{key => 123, other => value}
+                    ]
+                },
+            [[#{id => 123, name => "Jane"}, #{id => 123, name => "John"}], ById] =>
+                #{
+                    123 => [
+                        #{id => 123, name => "John"},
+                        #{id => 123, name => "Jane"}
+                    ]
+                }
+        }
+    ).
 
 group_unique_by_test_() ->
-    ById = fun(#{id := Id}) -> {ok, Id} end,
-    [?_assertError({assertEqual, _}, group_unique_by([1, a, "c"], key))] ++
-        ?function_test(
-            group_unique_by(Maps, Key),
-            [Maps, Key],
-            #{
-                [[], key] =>
-                    #{},
-                [[#{other => value}, #{key => abc}], key] =>
-                    #{
-                        abc => #{key => abc}
-                    },
-                [[#{key => 123, other => value}, #{key => abc}], key] =>
-                    #{
-                        123 => #{key => 123, other => value},
-                        abc => #{key => abc}
-                    },
-                [[#{key => 123, other => value}, #{key => 123, foo => bar}], key] =>
-                    #{
-                        123 => #{key => 123, foo => bar}
-                    },
-                [[#{id => 123, name => "Jane"}, #{id => 123, name => "John"}], ById] =>
-                    #{
-                        123 => #{id => 123, name => "Jane"}
-                    }
-            }
-        ).
+    ById = fun(#{id := Id}) -> Id end,
+    ?function_test(
+        group_unique_by(Maps, Key),
+        [Maps, Key],
+        #{
+            [[], key] =>
+                #{},
+            [[#{other => value}, #{key => abc}], key] =>
+                #{
+                    abc => #{key => abc}
+                },
+            [[#{key => 123, other => value}, #{key => abc}], key] =>
+                #{
+                    123 => #{key => 123, other => value},
+                    abc => #{key => abc}
+                },
+            [[#{key => 123, other => value}, #{key => 123, foo => bar}], key] =>
+                #{
+                    123 => #{key => 123, foo => bar}
+                },
+            [[#{id => 123, name => "Jane"}, #{id => 123, name => "John"}], ById] =>
+                #{
+                    123 => #{id => 123, name => "Jane"}
+                }
+        }
+    ).
 
 dget_test_() ->
     [
